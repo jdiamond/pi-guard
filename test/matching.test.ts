@@ -58,6 +58,7 @@ test("globMatch", async (t) => {
 	await t.test("* matches anything except /", () => {
 		assert.equal(globMatch("*.ts", "test.ts"), true);
 		assert.equal(globMatch("*.ts", "src/test.ts"), false);
+		assert.equal(globMatch("*.env", ".env"), true);
 		assert.equal(globMatch("test/*", "test/foo.ts"), true);
 		assert.equal(globMatch("test/*", "test/sub/foo.ts"), false);
 	});
@@ -67,6 +68,7 @@ test("globMatch", async (t) => {
 		assert.equal(globMatch("**/*.ts", "test.ts"), true);
 		assert.equal(globMatch("**/*.ts", "src/test.ts"), true);
 		assert.equal(globMatch("**/*.ts", "src/sub/test.ts"), true);
+		assert.equal(globMatch("**/*.key", ".ssh/.hidden/priv.key"), true);
 	});
 
 	await t.test("? matches single character", () => {
