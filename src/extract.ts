@@ -336,13 +336,11 @@ function collectWordPart(
 			// Commands inside expansions get their own group
 			const expansionGroup = allocGroupId(ctx);
 			if (part.script) {
-				collectNode(
-					part.script,
-					expansionSource(part, source),
-					commands,
-					expansionGroup,
-					ctx,
-				);
+				// unbash 4.x keeps script positions absolute. Re-parse the inner
+				// source to get a fresh AST with positions relative to inner text.
+				const innerSource = expansionSource(part, source);
+				const innerAst = parseBash(innerSource);
+				collectNode(innerAst, innerSource, commands, expansionGroup, ctx);
 			}
 			return;
 		}
@@ -498,12 +496,14 @@ function collectArithmeticExpression(
 			// Commands inside arithmetic expansions get their own group
 			const expansionGroup = allocGroupId(ctx);
 			if (expr.script) {
-				// Extract inner source from text like "$(cmd)" -> "cmd"
+				// unbash 4.x keeps script positions absolute. Re-parse the inner
+				// source to get a fresh AST with positions relative to inner text.
 				const innerSource =
 					expr.text.startsWith("$(") && expr.text.endsWith(")")
 						? expr.text.slice(2, -1)
 						: expr.text;
-				collectNode(expr.script, innerSource, commands, expansionGroup, ctx);
+				const innerAst = parseBash(innerSource);
+				collectNode(innerAst, innerSource, commands, expansionGroup, ctx);
 			} else if (expr.inner) {
 				// Parse the inner text and collect commands (for double-quoted context)
 				const innerAst = parseBash(expr.inner);

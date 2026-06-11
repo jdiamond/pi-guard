@@ -28,10 +28,14 @@ All notable changes to this project will be documented in this file.
 - Bare assignments (commands with prefix assignments but no command name, e.g. `TOKEN=$(...)`) are now shown in approval prompts instead of being silently dropped. Previously, `TOKEN=$(curl ... | jq ...) && curl ...` would only display the inner and outer `curl` commands — the assignment line was invisible.
 - Removed `"find -exec": "ask"` from default rules — sub-commands inside `-exec` are now independently checked by wrapper expansion, making the blanket rule redundant.
 - `isSubsequence` now supports glob wildcards in tokens (via `minimatch`) instead of exact string matching only.
+- **Package renamed** — `@mariozechner/pi-coding-agent` → `@earendil-works/pi-coding-agent` (0.79.1). The old package is deprecated.
+- **Dependencies updated and pinned:** `minimatch` 10.2.5, `unbash` 4.0.0, `typebox` 1.1.39, `@biomejs/biome` 2.4.16, `typescript` 6.0.3, `@types/node` 25.9.1.
+- **Removed `@types/minimatch`** — minimatch 10.x ships its own types.
 
 ### Fixed
 
 - Redirect formatting in approval prompts preserves original spacing — `> /tmp/file` is no longer squished to `>/tmp/file`. The formatter now uses source slices for redirect spans instead of reconstructing from AST tokens.
+- **unbash 4.0.0 compatibility** — unbash 4.0.0 made inner substitution script `pos`/`end` absolute in the original source (previously relative to the extracted inner text). pi-guard now re-parses the extracted inner text with unbash to get fresh AST nodes with relative positions, avoiding position mismatches in command display and rule matching.
 
 ## [1.3.0] - 2026-04-25
 
