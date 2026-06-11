@@ -25,6 +25,7 @@ All notable changes to this project will be documented in this file.
 
 ### Changed
 
+- **Custom tool approval prompts now show all parameters** — Previously only the first parameter value was displayed with no key label (e.g. a bare `"1"` for `git_add_pr_comment`). Now all non-`undefined` parameters are shown as `key: value` pairs, one per line, with type-aware formatting: strings are truncated at 200 chars, arrays are comma-joined, booleans and numbers are shown as-is, and `undefined` values are omitted.
 - Bare assignments (commands with prefix assignments but no command name, e.g. `TOKEN=$(...)`) are now shown in approval prompts instead of being silently dropped. Previously, `TOKEN=$(curl ... | jq ...) && curl ...` would only display the inner and outer `curl` commands — the assignment line was invisible.
 - Removed `"find -exec": "ask"` from default rules — sub-commands inside `-exec` are now independently checked by wrapper expansion, making the blanket rule redundant.
 - `isSubsequence` now supports glob wildcards in tokens (via `minimatch`) instead of exact string matching only.

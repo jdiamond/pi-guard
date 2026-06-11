@@ -109,6 +109,7 @@ async function handleMatchedTool(
 				toolRules,
 				ctx,
 				context.sessionRules,
+				input,
 			);
 	}
 }

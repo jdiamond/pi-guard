@@ -25,22 +25,13 @@ export async function handleInteractiveApproval(
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 ): Promise<{ block: true; reason: string } | undefined> {
-	const value = String(
-		input[
-			tool === "bash"
-				? "command"
-				: tool === "read" || tool === "edit" || tool === "write"
-					? "path"
-					: (Object.keys(input)[0] ?? "input")
-		],
-	);
 	return handleToolApproval(
 		pi,
 		tool,
 		"ask",
 		ctx,
 		sessionRules,
-		buildCustomApprovalPrompt(tool, value),
+		buildCustomApprovalPrompt(tool, input),
 	);
 }
 
@@ -240,6 +231,7 @@ export async function handleExactTool(
 	toolRules: Record<string, Action>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
+	input: ToolCallInput,
 ): Promise<{ block: true; reason: string } | undefined> {
 	return handleToolApproval(
 		pi,
@@ -247,6 +239,6 @@ export async function handleExactTool(
 		resolveExactAction(value, toolRules),
 		ctx,
 		sessionRules,
-		buildCustomApprovalPrompt(tool, value),
+		buildCustomApprovalPrompt(tool, input),
 	);
 }

@@ -46,12 +46,48 @@ export function buildFileApprovalPrompt(
 	return `⚠️ ${tool.charAt(0).toUpperCase() + tool.slice(1)} Permission Required\n\n${truncate(path, maxLength)}`;
 }
 
-/** Build prompt for custom tools with exact matchers. */
+/** Build prompt for custom tools showing all input parameters. */
 export function buildCustomApprovalPrompt(
 	tool: string,
-	input: string,
-	options?: { maxLength?: number },
+	input: Record<string, unknown>,
+	options?: { maxLength?: number; valueMaxLength?: number },
 ): string {
-	const maxLength = options?.maxLength ?? 120;
-	return `⚠️ ${tool} Permission Required\n\n${truncate(input, maxLength)}`;
+	const valueMaxLength = options?.valueMaxLength ?? 200;
+	const header = `⚠️ ${tool} Permission Required`;
+	const params = formatParams(input, valueMaxLength);
+	if (!params) return `${header}\n\n(no parameters)`;
+	return [header, "", params].join("\n");
+}
+
+function formatParams(
+	input: Record<string, unknown>,
+	maxLength: number,
+): string | undefined {
+	let result = "";
+	let first = true;
+	for (const [key, value] of Object.entries(input)) {
+		if (value === undefined) continue;
+		const formatted = formatParamValue(value, maxLength);
+		if (!first) result += "\n";
+		result += `${key}: ${formatted}`;
+		first = false;
+	}
+	return result || undefined;
+}
+
+function formatParamValue(value: unknown, maxLength: number): string {
+	if (value === null) return "null";
+	if (typeof value === "string") return truncate(value, maxLength);
+	if (typeof value === "number" || typeof value === "boolean") {
+		return String(value);
+	}
+	if (Array.isArray(value)) {
+		const joined = value.map((v) => String(v)).join(", ");
+		return truncate(joined, maxLength);
+	}
+	try {
+		return truncate(JSON.stringify(value), maxLength);
+	} catch {
+		return truncate(String(value), maxLength);
+	}
 }

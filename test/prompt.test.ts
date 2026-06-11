@@ -212,25 +212,76 @@ test("buildFileApprovalPrompt", async (t) => {
 });
 
 test("buildCustomApprovalPrompt", async (t) => {
-	await t.test("formats custom tool prompts", () => {
-		const prompt = buildCustomApprovalPrompt("webfetch", "https://example.com");
+	await t.test("formats custom tool prompts with all params", () => {
+		const prompt = buildCustomApprovalPrompt("webfetch", {
+			url: "https://example.com",
+		});
 		assert.equal(
 			prompt,
-			"⚠️ webfetch Permission Required\n\nhttps://example.com",
+			"⚠️ webfetch Permission Required\n\nurl: https://example.com",
 		);
 	});
 
-	await t.test("capitalizes tool name", () => {
-		const prompt = buildCustomApprovalPrompt("spawn", "build");
-		assert.equal(prompt, "⚠️ spawn Permission Required\n\nbuild");
+	await t.test("shows multiple parameters", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			number: 1,
+			body: "hello world",
+		});
+		assert.equal(
+			prompt,
+			"⚠️ my_tool Permission Required\n\nnumber: 1\nbody: hello world",
+		);
 	});
 
-	await t.test("truncates long input", () => {
-		const longInput = "a".repeat(150);
-		const prompt = buildCustomApprovalPrompt("webfetch", longInput, {
-			maxLength: 50,
+	await t.test("skips undefined parameters", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			number: 1,
+			workingDir: undefined,
 		});
+		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nnumber: 1");
+	});
+
+	await t.test("formats arrays", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			files: ["a.ts", "b.ts"],
+		});
+		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nfiles: a.ts, b.ts");
+	});
+
+	await t.test("formats booleans", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			draft: true,
+		});
+		assert.equal(prompt, "⚠️ my_tool Permission Required\n\ndraft: true");
+	});
+
+	await t.test("truncates long values", () => {
+		const longBody = "a".repeat(150);
+		const prompt = buildCustomApprovalPrompt(
+			"webfetch",
+			{
+				body: longBody,
+			},
+			{
+				valueMaxLength: 20,
+			},
+		);
 		assert.ok(prompt.includes("…"));
-		assert.ok(prompt.length < 200); // Should be truncated
+		assert.ok(prompt.length < 100);
+	});
+
+	await t.test("shows null values", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			value: null,
+		});
+		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nvalue: null");
+	});
+
+	await t.test("shows placeholder when all params are undefined", () => {
+		const prompt = buildCustomApprovalPrompt("my_tool", {
+			a: undefined,
+			b: undefined,
+		});
+		assert.equal(prompt, "⚠️ my_tool Permission Required\n\n(no parameters)");
 	});
 });
