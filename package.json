@@ -1,6 +1,6 @@
 {
 	"name": "pi-guard",
-	"version": "1.3.0",
+	"version": "1.4.0",
 	"description": "General-purpose permission system for pi tools, handling permissions for bash and file tools with extensible matchers for custom tools.",
 	"keywords": [
 		"pi-package",
