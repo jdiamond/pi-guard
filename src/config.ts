@@ -60,37 +60,6 @@ const GuardConfigSchema = Type.Object({
 
 // ── Config validation ──
 
-export function validateToolRules(input: unknown): {
-	rules: Record<string, Action>;
-	warnings: string[];
-} {
-	const warnings: string[] = [];
-	const rules: Record<string, Action> = {};
-
-	if (!input || typeof input !== "object" || Array.isArray(input)) {
-		return {
-			rules,
-			warnings: [
-				'rules must be an object mapping patterns to "allow", "ask", or "deny"',
-			],
-		};
-	}
-
-	for (const [key, value] of Object.entries(input as Record<string, unknown>)) {
-		if (
-			typeof key === "string" &&
-			key.trim().length > 0 &&
-			(value === "allow" || value === "ask" || value === "deny")
-		) {
-			rules[key] = value;
-		} else {
-			warnings.push(`Invalid rule: "${key}" -> "${value}"`);
-		}
-	}
-
-	return { rules, warnings };
-}
-
 export function validateLoadedGuardConfig(input: unknown): LoadedConfigResult {
 	if (!input || typeof input !== "object") {
 		return {

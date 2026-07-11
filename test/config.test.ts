@@ -6,7 +6,6 @@ import {
 	getGuardConfigFromSettings,
 	sortRulesKeys,
 	validateLoadedGuardConfig,
-	validateToolRules,
 } from "../src/config.ts";
 import { DEFAULT_CONFIG } from "../src/defaults.ts";
 import type { GuardConfig } from "../src/types.ts";
@@ -16,42 +15,6 @@ function guardOf(s: Record<string, unknown>): Record<string, unknown> {
 	assert.ok(g !== null && typeof g === "object" && !Array.isArray(g));
 	return g as Record<string, unknown>;
 }
-
-test("validateToolRules", async (t) => {
-	await t.test("accepts valid rules", () => {
-		const result = validateToolRules({ git: "allow", curl: "ask" });
-		assert.deepEqual(result.rules, { git: "allow", curl: "ask" });
-		assert.equal(result.warnings.length, 0);
-	});
-
-	await t.test("accepts deny action", () => {
-		const result = validateToolRules({ rm: "deny" });
-		assert.deepEqual(result.rules, { rm: "deny" });
-		assert.equal(result.warnings.length, 0);
-	});
-
-	await t.test("rejects invalid actions", () => {
-		const result = validateToolRules({ git: "invalid" });
-		assert.equal(result.rules.git, undefined);
-		assert.ok(result.warnings.length > 0);
-	});
-
-	await t.test("rejects empty pattern", () => {
-		const result = validateToolRules({ "": "allow" });
-		assert.equal(result.rules[""], undefined);
-		assert.ok(result.warnings.length > 0);
-	});
-
-	await t.test("accepts empty rules object", () => {
-		const result = validateToolRules({});
-		assert.equal(result.warnings.length, 0);
-	});
-
-	await t.test("rejects non-object input", () => {
-		const result = validateToolRules(null);
-		assert.equal(result.warnings.length > 0, true);
-	});
-});
 
 test("validateLoadedGuardConfig", async (t) => {
 	await t.test("accepts valid config with rules", () => {
