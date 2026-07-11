@@ -4,10 +4,18 @@ import {
 	buildEffectiveRules,
 	buildGuardSettings,
 	getGuardConfigFromSettings,
+	sortRulesKeys,
 	validateLoadedGuardConfig,
 	validateToolRules,
 } from "../src/config.ts";
 import { DEFAULT_CONFIG } from "../src/defaults.ts";
+import type { GuardConfig } from "../src/types.ts";
+
+function guardOf(s: Record<string, unknown>): Record<string, unknown> {
+	const g = s.guard;
+	assert.ok(g !== null && typeof g === "object" && !Array.isArray(g));
+	return g as Record<string, unknown>;
+}
 
 test("validateToolRules", async (t) => {
 	await t.test("accepts valid rules", () => {
@@ -203,12 +211,6 @@ test("getGuardConfigFromSettings", async (t) => {
 });
 
 test("buildGuardSettings", async (t) => {
-	function guard(s: Record<string, unknown>) {
-		const g = s.guard;
-		assert.ok(g !== null && typeof g === "object" && !Array.isArray(g));
-		return g as Record<string, unknown>;
-	}
-
 	await t.test("omits matchers when only defaults are present", () => {
 		const result = buildGuardSettings(
 			{
@@ -218,9 +220,9 @@ test("buildGuardSettings", async (t) => {
 			},
 			{},
 		);
-		assert.equal(guard(result).enabled, true);
-		assert.equal(guard(result).matchers, undefined);
-		assert.deepEqual(guard(result).rules, { git_status: "allow" });
+		assert.equal(guardOf(result).enabled, true);
+		assert.equal(guardOf(result).matchers, undefined);
+		assert.deepEqual(guardOf(result).rules, { git_status: "allow" });
 	});
 
 	await t.test(
@@ -237,7 +239,7 @@ test("buildGuardSettings", async (t) => {
 				},
 				{},
 			);
-			assert.deepEqual(guard(result).matchers, {
+			assert.deepEqual(guardOf(result).matchers, {
 				my_tool: { param: "input", type: "exact" },
 			});
 		},
@@ -256,7 +258,7 @@ test("buildGuardSettings", async (t) => {
 				},
 				{},
 			);
-			assert.deepEqual(guard(result).matchers, {
+			assert.deepEqual(guardOf(result).matchers, {
 				my_tool: { param: "input", type: "exact" },
 			});
 		},
@@ -274,7 +276,7 @@ test("buildGuardSettings", async (t) => {
 			},
 			{},
 		);
-		assert.deepEqual(guard(result).matchers, {
+		assert.deepEqual(guardOf(result).matchers, {
 			bash: { param: "rawCommand", type: "bash" },
 		});
 	});
@@ -290,7 +292,7 @@ test("buildGuardSettings", async (t) => {
 		);
 		assert.equal(result.theme, "dark");
 		assert.deepEqual(result.window, { width: 100 });
-		assert.deepEqual(guard(result).rules, {});
+		assert.deepEqual(guardOf(result).rules, {});
 	});
 
 	await t.test("writes profiles when present", () => {
@@ -303,7 +305,7 @@ test("buildGuardSettings", async (t) => {
 			},
 			{},
 		);
-		assert.deepEqual(guard(result).profiles, { strict: { bash: "deny" } });
+		assert.deepEqual(guardOf(result).profiles, { strict: { bash: "deny" } });
 	});
 
 	await t.test("writes shortcuts when present", () => {
@@ -316,7 +318,7 @@ test("buildGuardSettings", async (t) => {
 			},
 			{},
 		);
-		assert.deepEqual(guard(result).shortcuts, { off: "disable" });
+		assert.deepEqual(guardOf(result).shortcuts, { off: "disable" });
 	});
 
 	await t.test("omits matchers when config has no matchers field", () => {
@@ -327,7 +329,83 @@ test("buildGuardSettings", async (t) => {
 			},
 			{},
 		);
-		assert.equal(guard(result).matchers, undefined);
+		assert.equal(guardOf(result).matchers, undefined);
+	});
+});
+
+test("sortRulesKeys", async (t) => {
+	await t.test("sorts top-level tool names alphabetically", () => {
+		const result = sortRulesKeys({
+			z_tool: "allow",
+			a_tool: "ask",
+			m_tool: "deny",
+		});
+		assert.deepEqual(result, {
+			a_tool: "ask",
+			m_tool: "deny",
+			z_tool: "allow",
+		});
+	});
+
+	await t.test("sorts nested bash patterns alphabetically", () => {
+		const result = sortRulesKeys({
+			bash: {
+				"z command": "allow",
+				"a command": "ask",
+				"m command": "deny",
+			},
+		});
+		assert.deepEqual(result, {
+			bash: {
+				"a command": "ask",
+				"m command": "deny",
+				"z command": "allow",
+			},
+		});
+	});
+
+	await t.test("preserves blanket string action", () => {
+		assert.equal(sortRulesKeys("allow"), "allow");
+		assert.equal(sortRulesKeys("deny"), "deny");
+	});
+
+	await t.test("sorts mix of string and object tool rules", () => {
+		const result = sortRulesKeys({
+			bash: {
+				"npm test": "allow",
+				"git status": "allow",
+			},
+			git_status: "allow",
+			a_tool: "ask",
+		});
+		assert.deepEqual(result, {
+			a_tool: "ask",
+			bash: {
+				"git status": "allow",
+				"npm test": "allow",
+			},
+			git_status: "allow",
+		});
+	});
+
+	await t.test("is called by buildGuardSettings", () => {
+		const config: GuardConfig = {
+			enabled: true,
+			rules: {
+				bash: {
+					"z command": "allow",
+					"a command": "ask",
+				},
+				git_status: "allow",
+				a_tool: "deny",
+			},
+		};
+		const result = buildGuardSettings(config, {});
+		const rules = guardOf(result).rules;
+		assert.ok(rules !== null && typeof rules === "object");
+		const r = rules as Record<string, unknown>;
+		const keys = Object.keys(r);
+		assert.deepEqual(keys, ["a_tool", "bash", "git_status"]);
 	});
 });
 

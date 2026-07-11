@@ -286,6 +286,28 @@ export function loadConfig() {
 	return { config: { ...SAFE_FALLBACK_CONFIG }, envRules };
 }
 
+export function sortRulesKeys(rules: Rules): Rules {
+	if (typeof rules === "string") return rules;
+
+	const sorted: Record<string, ToolRules> = {};
+	for (const tool of Object.keys(rules).sort()) {
+		const toolRules = rules[tool];
+		if (toolRules === undefined) continue;
+		if (typeof toolRules === "object" && toolRules !== null) {
+			const patterns: Record<string, Action> = {};
+			for (const pattern of Object.keys(toolRules).sort()) {
+				const action = toolRules[pattern];
+				if (action === undefined) continue;
+				patterns[pattern] = action;
+			}
+			sorted[tool] = patterns;
+		} else {
+			sorted[tool] = toolRules;
+		}
+	}
+	return sorted;
+}
+
 export function buildGuardSettings(
 	config: GuardConfig,
 	existing: Record<string, unknown>,
@@ -310,7 +332,7 @@ export function buildGuardSettings(
 				Object.keys(customMatchers).length > 0 && {
 					matchers: customMatchers,
 				}),
-			rules: config.rules,
+			rules: sortRulesKeys(config.rules),
 			...(config.profiles &&
 				Object.keys(config.profiles).length > 0 && {
 					profiles: config.profiles,
