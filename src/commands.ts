@@ -57,21 +57,21 @@ function handleProfileCommand(
 	return { message: `Profile activated: ${target}`, type: "info" as const };
 }
 
-function handleToggleCommand(context: GuardContext): string {
+async function handleToggleCommand(context: GuardContext): Promise<string> {
 	context.config.enabled = !context.config.enabled;
-	saveConfig(context.config);
+	await saveConfig(context.config);
 	return `pi-guard is now ${context.config.enabled ? "ENABLED" : "DISABLED"}`;
 }
 
-function handleEnableCommand(context: GuardContext): string {
+async function handleEnableCommand(context: GuardContext): Promise<string> {
 	context.config.enabled = true;
-	saveConfig(context.config);
+	await saveConfig(context.config);
 	return "pi-guard is now ENABLED";
 }
 
-function handleDisableCommand(context: GuardContext): string {
+async function handleDisableCommand(context: GuardContext): Promise<string> {
 	context.config.enabled = false;
-	saveConfig(context.config);
+	await saveConfig(context.config);
 	return "pi-guard is now DISABLED";
 }
 
@@ -162,22 +162,22 @@ function buildListOutput(context: GuardContext, cwd: string): string {
 	return output;
 }
 
-export function handleGuardCommand(
+export async function handleGuardCommand(
 	action: string,
 	target: string | undefined,
 	context: GuardContext,
 	cwd: string,
-): { message: string; type: "info" | "warning" } {
+): Promise<{ message: string; type: "info" | "warning" }> {
 	if (action === "toggle") {
-		return { message: handleToggleCommand(context), type: "info" };
+		return { message: await handleToggleCommand(context), type: "info" };
 	}
 
 	if (action === "enable") {
-		return { message: handleEnableCommand(context), type: "info" };
+		return { message: await handleEnableCommand(context), type: "info" };
 	}
 
 	if (action === "disable") {
-		return { message: handleDisableCommand(context), type: "info" };
+		return { message: await handleDisableCommand(context), type: "info" };
 	}
 
 	if (action === "profile") {

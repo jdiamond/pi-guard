@@ -145,7 +145,7 @@ async function saveToolRule(tool: string, context: GuardContext) {
 		typeof context.config.rules === "string" ? {} : { ...context.config.rules };
 	current[tool] = "allow";
 	context.config.rules = current;
-	saveConfig(context.config);
+	await saveConfig(context.config);
 }
 
 async function saveBashRules(
@@ -168,7 +168,7 @@ async function saveBashRules(
 
 	rules[tool] = toolRules;
 	context.config.rules = rules;
-	saveConfig(context.config);
+	await saveConfig(context.config);
 }
 
 async function applyToolAction(
@@ -216,7 +216,12 @@ export default function (pi: ExtensionAPI) {
 			description: `pi-guard shortcut: ${subcommand}`,
 			handler: async (_args, ctx) => {
 				const { action, target } = parseGuardArgs(subcommand);
-				const result = handleGuardCommand(action, target, context, ctx.cwd);
+				const result = await handleGuardCommand(
+					action,
+					target,
+					context,
+					ctx.cwd,
+				);
 				ctx.ui.notify(result.message, result.type);
 			},
 		});
@@ -227,7 +232,7 @@ export default function (pi: ExtensionAPI) {
 		description: "Manage pi-guard security settings",
 		handler: async (args, ctx) => {
 			const { action, target } = parseGuardArgs(args);
-			const result = handleGuardCommand(action, target, context, ctx.cwd);
+			const result = await handleGuardCommand(action, target, context, ctx.cwd);
 			ctx.ui.notify(result.message, result.type);
 		},
 	});

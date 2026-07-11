@@ -1,4 +1,5 @@
 import * as fs from "node:fs";
+import * as fsPromises from "node:fs/promises";
 import * as os from "node:os";
 import * as path from "node:path";
 import { type Static, Type } from "typebox";
@@ -352,18 +353,25 @@ export function buildGuardSettings(
 	};
 }
 
-export function saveConfig(config: GuardConfig) {
+export async function saveConfig(config: GuardConfig) {
 	try {
-		fs.mkdirSync(AGENT_DIR, { recursive: true });
+		await fsPromises.mkdir(AGENT_DIR, { recursive: true });
 
 		let settings: Record<string, unknown> = {};
-		if (fs.existsSync(SETTINGS_PATH)) {
-			settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf-8"));
+		try {
+			const data = await fsPromises.readFile(SETTINGS_PATH, "utf-8");
+			settings = JSON.parse(data);
+		} catch {
+			// File does not exist yet or cannot be read; start with empty settings.
 		}
 
 		settings = buildGuardSettings(config, settings);
 
-		fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8");
+		await fsPromises.writeFile(
+			SETTINGS_PATH,
+			JSON.stringify(settings, null, 2),
+			"utf-8",
+		);
 	} catch (e) {
 		console.error("Failed to save guard config to settings.json", e);
 	}
