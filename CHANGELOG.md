@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file.
 
+## [Unreleased]
+
+### Added
+
+- **Persistent bash rules and command-level session rules** — New "Always allow
+  (save to settings.json)" option persists patterns to `~/.pi/agent/settings.json`.
+  Both session and persistent options now open an editor pre-filled with
+  unauthorized command patterns — trim, wildcard, or delete lines before
+  confirming. Cancel returns to the approval select.
+
 ## [1.4.0] - 2026-07-11
 
 ### Added

@@ -8,6 +8,7 @@ import {
 	buildEffectiveRules,
 	loadConfig,
 	loadProjectConfig,
+	saveConfig,
 } from "./config.ts";
 import {
 	handleBashTool,
@@ -15,7 +16,13 @@ import {
 	handleGlobTool,
 	handleInteractiveApproval,
 } from "./handlers.ts";
-import type { Action, Matchers, Rules, ToolCallInput } from "./types.ts";
+import type {
+	Action,
+	Matchers,
+	Rules,
+	ToolCallInput,
+	ToolRules,
+} from "./types.ts";
 
 const block = (reason: string): { block: true; reason: string } => ({
 	block: true,
@@ -91,6 +98,7 @@ async function handleMatchedTool(
 				toolRules,
 				ctx,
 				context.sessionRules,
+				(patterns) => saveBashRules(tool, patterns, context),
 			);
 		case "glob":
 			return handleGlobTool(
@@ -112,6 +120,29 @@ async function handleMatchedTool(
 				input,
 			);
 	}
+}
+
+async function saveBashRules(
+	tool: string,
+	patterns: string[],
+	context: GuardContext,
+) {
+	const current = context.config.rules;
+	const rules: Record<string, ToolRules> =
+		typeof current === "string" ? {} : { ...current };
+
+	const toolRules: Record<string, Action> =
+		rules[tool] && typeof rules[tool] === "object"
+			? { ...(rules[tool] as Record<string, Action>) }
+			: {};
+
+	for (const pattern of patterns) {
+		toolRules[pattern] = "allow";
+	}
+
+	rules[tool] = toolRules;
+	context.config.rules = rules;
+	saveConfig(context.config);
 }
 
 async function applyToolAction(

@@ -42,6 +42,7 @@ export async function handleBashTool(
 	toolRules: Record<string, Action>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
+	onSaveBashRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	let ast: Script | undefined;
 	try {
@@ -69,6 +70,7 @@ export async function handleBashTool(
 		expandedWrappers,
 		ctx,
 		sessionRules,
+		onSaveBashRules,
 	);
 }
 
@@ -145,39 +147,157 @@ async function handleInteractiveBash(
 	expandedWrappers: Set<CommandRef>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
+	onSaveBashRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	const uniqueBaseNames = Array.from(
 		new Set(unauthorizedCommands.map(getCommandName)),
 	);
 	const alwaysLabel = `Always allow ${uniqueBaseNames.join(", ")} (this session)`;
+	const alwaysSaveLabel = `Always allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
 
 	pi.events.emit("nudge", { body: "Command needs approval" });
 	pi.events.emit("herdr:blocked", { active: true, label: "Command approval" });
-	const choice = await ctx.ui.select(
-		buildApprovalPrompt(
-			allCommands,
-			unauthorizedCommands,
-			undefined,
-			expandedWrappers,
-		),
-		["Allow", alwaysLabel, "Reject"],
-	);
-	pi.events.emit("herdr:blocked", { active: false });
 
-	if (choice === alwaysLabel) {
-		sessionRules[tool] = sessionRules[tool] ?? {};
-		for (const name of uniqueBaseNames) {
-			sessionRules[tool][name] = "allow";
+	const prompt = buildApprovalPrompt(
+		allCommands,
+		unauthorizedCommands,
+		undefined,
+		expandedWrappers,
+	);
+
+	try {
+		return await runApprovalLoop(
+			prompt,
+			tool,
+			alwaysLabel,
+			alwaysSaveLabel,
+			unauthorizedCommands,
+			ctx,
+			sessionRules,
+			onSaveBashRules,
+		);
+	} finally {
+		pi.events.emit("herdr:blocked", { active: false });
+	}
+}
+
+async function runApprovalLoop(
+	prompt: string,
+	tool: string,
+	alwaysLabel: string,
+	alwaysSaveLabel: string,
+	unauthorizedCommands: CommandRef[],
+	ctx: ExtensionContext,
+	sessionRules: Record<string, Record<string, Action>>,
+	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+): Promise<{ block: true; reason: string } | undefined> {
+	while (true) {
+		const choice = await ctx.ui.select(prompt, [
+			"Allow",
+			alwaysLabel,
+			alwaysSaveLabel,
+			"Reject",
+		]);
+
+		if (choice === alwaysLabel) {
+			if (
+				await handleSessionPatterns(
+					unauthorizedCommands,
+					ctx,
+					tool,
+					sessionRules,
+				)
+			) {
+				return;
+			}
+			continue;
 		}
+
+		if (choice === alwaysSaveLabel) {
+			if (
+				await handleSavePatterns(unauthorizedCommands, ctx, onSaveBashRules)
+			) {
+				return;
+			}
+			continue;
+		}
+
+		if (choice !== "Allow") {
+			return {
+				block: true,
+				reason: `[Blocked by pi-guard: User rejected this invocation]`,
+			};
+		}
+
 		return;
 	}
+}
 
-	if (choice !== "Allow") {
-		return {
-			block: true,
-			reason: `[Blocked by pi-guard: User rejected this invocation]`,
-		};
+async function handleSessionPatterns(
+	unauthorizedCommands: CommandRef[],
+	ctx: ExtensionContext,
+	tool: string,
+	sessionRules: Record<string, Record<string, Action>>,
+): Promise<boolean> {
+	const patterns = await openCommandEditor(
+		unauthorizedCommands,
+		ctx,
+		"Edit commands to allow for this session (one per line)",
+	);
+	if (patterns === undefined) return false;
+
+	sessionRules[tool] = sessionRules[tool] ?? {};
+	for (const pattern of patterns) {
+		sessionRules[tool][pattern] = "allow";
 	}
+	return true;
+}
+
+async function handleSavePatterns(
+	unauthorizedCommands: CommandRef[],
+	ctx: ExtensionContext,
+	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+): Promise<boolean> {
+	const patterns = await openCommandEditor(
+		unauthorizedCommands,
+		ctx,
+		"Edit commands to always allow (one per line)",
+	);
+	if (patterns === undefined) return false;
+
+	if (patterns.length > 0 && onSaveBashRules) {
+		await onSaveBashRules(patterns);
+	}
+	return true;
+}
+
+async function openCommandEditor(
+	unauthorizedCommands: CommandRef[],
+	ctx: ExtensionContext,
+	title: string,
+): Promise<string[] | undefined> {
+	const prefillLines = Array.from(
+		new Set(
+			unauthorizedCommands.map((cmd) => {
+				const name = getCommandName(cmd);
+				const args = getCommandArgs(cmd);
+				return args.length > 0 ? `${name} ${args.join(" ")}` : name;
+			}),
+		),
+	).join("\n");
+
+	const result = await ctx.ui.editor(title, prefillLines);
+
+	if (result === undefined) return undefined;
+
+	return Array.from(
+		new Set(
+			result
+				.split("\n")
+				.map((l) => l.trim())
+				.filter((l) => l.length > 0),
+		),
+	);
 }
 
 async function handleToolApproval(
