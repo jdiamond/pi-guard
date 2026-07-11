@@ -18,6 +18,20 @@ import { getCommandArgs, getCommandName, isBareAssignment } from "./resolve.ts";
 import type { Action, CommandRef, ToolCallInput } from "./types.ts";
 import { expandWrapperCommands } from "./wrappers.ts";
 
+async function withBlockedUi<T>(
+	pi: ExtensionAPI,
+	label: string,
+	fn: () => Promise<T>,
+): Promise<T> {
+	pi.events.emit("nudge", { body: label });
+	pi.events.emit("herdr:blocked", { active: true, label });
+	try {
+		return await fn();
+	} finally {
+		pi.events.emit("herdr:blocked", { active: false });
+	}
+}
+
 export async function handleInteractiveApproval(
 	pi: ExtensionAPI,
 	tool: string,
@@ -87,16 +101,9 @@ async function handleBashParseFailure(
 		};
 	}
 
-	pi.events.emit("nudge", { body: "Command needs approval" });
-	pi.events.emit("herdr:blocked", {
-		active: true,
-		label: "Unparseable command",
-	});
-	const confirmed = await ctx.ui.confirm(
-		"⚠️ Could Not Parse Command Safely",
-		"\nAllow anyway?",
+	const confirmed = await withBlockedUi(pi, "Unparseable command", () =>
+		ctx.ui.confirm("⚠️ Could Not Parse Command Safely", "\nAllow anyway?"),
 	);
-	pi.events.emit("herdr:blocked", { active: false });
 
 	if (!confirmed) {
 		return {
@@ -159,9 +166,6 @@ async function handleInteractiveBash(
 	const alwaysLabel = `Always allow ${uniqueBaseNames.join(", ")} (this session)`;
 	const alwaysSaveLabel = `Always allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
 
-	pi.events.emit("nudge", { body: "Command needs approval" });
-	pi.events.emit("herdr:blocked", { active: true, label: "Command approval" });
-
 	const prompt = buildApprovalPrompt(
 		allCommands,
 		unauthorizedCommands,
@@ -169,8 +173,8 @@ async function handleInteractiveBash(
 		expandedWrappers,
 	);
 
-	try {
-		return await runApprovalLoop(
+	return withBlockedUi(pi, "Command approval", () =>
+		runApprovalLoop(
 			prompt,
 			tool,
 			alwaysLabel,
@@ -179,10 +183,8 @@ async function handleInteractiveBash(
 			ctx,
 			sessionRules,
 			onSaveBashRules,
-		);
-	} finally {
-		pi.events.emit("herdr:blocked", { active: false });
-	}
+		),
+	);
 }
 
 /**
@@ -336,10 +338,9 @@ async function handleToolApproval(
 	const choices = ["Allow", alwaysLabel];
 	if (onSave) choices.push(alwaysSaveLabel);
 	choices.push("Reject");
-	pi.events.emit("nudge", { body: `${tool} needs approval` });
-	pi.events.emit("herdr:blocked", { active: true, label: `${tool} approval` });
-	const choice = await ctx.ui.select(prompt, choices);
-	pi.events.emit("herdr:blocked", { active: false });
+	const choice = await withBlockedUi(pi, `${tool} approval`, () =>
+		ctx.ui.select(prompt, choices),
+	);
 	if (choice === alwaysLabel) {
 		sessionRules[tool] = { ...sessionRules[tool], "*": "allow" };
 		return;
