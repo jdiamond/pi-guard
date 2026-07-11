@@ -84,10 +84,12 @@ async function handleBashParseFailure(
 	}
 
 	pi.events.emit("nudge", { body: "Command needs approval" });
+	pi.events.emit("herdr:blocked", { active: true, label: "Unparseable command" });
 	const confirmed = await ctx.ui.confirm(
 		"⚠️ Could Not Parse Command Safely",
 		"\nAllow anyway?",
 	);
+	pi.events.emit("herdr:blocked", { active: false });
 
 	if (!confirmed) {
 		return {
@@ -147,6 +149,7 @@ async function handleInteractiveBash(
 	const alwaysLabel = `Always allow ${uniqueBaseNames.join(", ")} (this session)`;
 
 	pi.events.emit("nudge", { body: "Command needs approval" });
+	pi.events.emit("herdr:blocked", { active: true, label: "Command approval" });
 	const choice = await ctx.ui.select(
 		buildApprovalPrompt(
 			allCommands,
@@ -156,6 +159,7 @@ async function handleInteractiveBash(
 		),
 		["Allow", alwaysLabel, "Reject"],
 	);
+	pi.events.emit("herdr:blocked", { active: false });
 
 	if (choice === alwaysLabel) {
 		sessionRules[tool] = sessionRules[tool] ?? {};
@@ -193,7 +197,9 @@ async function handleToolApproval(
 	}
 	const alwaysLabel = `Always allow ${tool} (this session)`;
 	pi.events.emit("nudge", { body: `${tool} needs approval` });
+	pi.events.emit("herdr:blocked", { active: true, label: `${tool} approval` });
 	const choice = await ctx.ui.select(prompt, ["Allow", alwaysLabel, "Reject"]);
+	pi.events.emit("herdr:blocked", { active: false });
 	if (choice === alwaysLabel) {
 		sessionRules[tool] = { ...sessionRules[tool], "*": "allow" };
 		return;

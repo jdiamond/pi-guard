@@ -5,6 +5,8 @@ All notable changes to this project will be documented in this file.
 ## [Unreleased]
 
 ### Added
+
+- **herdr integration** — Emits `herdr:blocked` events with `active: true/false` around each approval prompt so herdr can track when pi-guard is blocking execution.
 - **Pipeline and redirect operators in approval prompts** — Commands connected by `|`, `&&`, `||`, or `;` now show the operator at the end of each line. Commands from different structural contexts (e.g., outer command vs. subshell expansion) are separated by blank lines. Previously these operators were silently dropped.
   ```
   ✖ cat foo |
