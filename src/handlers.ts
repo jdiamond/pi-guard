@@ -104,6 +104,8 @@ async function handleBashParseFailure(
 			reason: `[Blocked by pi-guard: User rejected this invocation]`,
 		};
 	}
+
+	// Returning undefined means the user allowed the command and it should run.
 }
 
 function findUnauthorizedCommands(
