@@ -68,7 +68,16 @@ async function handleToolCall(
 		return handleMatchedTool(pi, tool, input, toolRules, ctx, context);
 	}
 
-	return applyToolAction(pi, tool, input, action, ctx, context.sessionRules);
+	const onSave = () => saveToolRule(tool, context);
+	return applyToolAction(
+		pi,
+		tool,
+		input,
+		action,
+		ctx,
+		context.sessionRules,
+		onSave,
+	);
 }
 
 async function handleMatchedTool(
@@ -83,7 +92,16 @@ async function handleMatchedTool(
 	const matcher = matchers?.[tool];
 	if (!matcher) {
 		const action = toolRules["*"] ?? "ask";
-		return applyToolAction(pi, tool, input, action, ctx, context.sessionRules);
+		const onSave = () => saveToolRule(tool, context);
+		return applyToolAction(
+			pi,
+			tool,
+			input,
+			action,
+			ctx,
+			context.sessionRules,
+			onSave,
+		);
 	}
 
 	const value = input[matcher.param];
@@ -122,6 +140,14 @@ async function handleMatchedTool(
 	}
 }
 
+async function saveToolRule(tool: string, context: GuardContext) {
+	const current: Record<string, ToolRules> =
+		typeof context.config.rules === "string" ? {} : { ...context.config.rules };
+	current[tool] = "allow";
+	context.config.rules = current;
+	saveConfig(context.config);
+}
+
 async function saveBashRules(
 	tool: string,
 	patterns: string[],
@@ -152,11 +178,12 @@ async function applyToolAction(
 	action: Action,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
+	onSave?: () => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	if (action === "allow") return;
 	if (action === "deny") return block("Security policy");
 	if (!ctx.hasUI) return block("No interactive session available");
-	return handleInteractiveApproval(pi, tool, input, ctx, sessionRules);
+	return handleInteractiveApproval(pi, tool, input, ctx, sessionRules, onSave);
 }
 
 export default function (pi: ExtensionAPI) {
@@ -164,7 +191,6 @@ export default function (pi: ExtensionAPI) {
 	const loaded = loadConfig();
 	const projectResult = loadProjectConfig(process.cwd());
 
-	const userRules: Rules = loaded.config.rules;
 	const projectRules: Rules = projectResult?.config.rules ?? {};
 	const envRules: Rules | undefined = loaded.envRules;
 
@@ -211,7 +237,7 @@ export default function (pi: ExtensionAPI) {
 		if (!context.config.enabled) return;
 
 		const effectiveRules = getEffectiveRulesForEvent(
-			userRules,
+			context.config.rules,
 			projectRules,
 			envRules,
 			context,

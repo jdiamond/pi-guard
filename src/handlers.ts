@@ -24,6 +24,7 @@ export async function handleInteractiveApproval(
 	input: ToolCallInput,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
+	onSave?: () => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	return handleToolApproval(
 		pi,
@@ -32,6 +33,7 @@ export async function handleInteractiveApproval(
 		ctx,
 		sessionRules,
 		buildCustomApprovalPrompt(tool, input),
+		onSave,
 	);
 }
 
@@ -307,6 +309,7 @@ async function handleToolApproval(
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 	prompt: string,
+	onSave?: () => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	if (action === "allow") return;
 	if (action === "deny") {
@@ -319,12 +322,20 @@ async function handleToolApproval(
 		};
 	}
 	const alwaysLabel = `Always allow ${tool} (this session)`;
+	const alwaysSaveLabel = `Always allow ${tool} (save to settings.json)`;
+	const choices = ["Allow", alwaysLabel];
+	if (onSave) choices.push(alwaysSaveLabel);
+	choices.push("Reject");
 	pi.events.emit("nudge", { body: `${tool} needs approval` });
 	pi.events.emit("herdr:blocked", { active: true, label: `${tool} approval` });
-	const choice = await ctx.ui.select(prompt, ["Allow", alwaysLabel, "Reject"]);
+	const choice = await ctx.ui.select(prompt, choices);
 	pi.events.emit("herdr:blocked", { active: false });
 	if (choice === alwaysLabel) {
 		sessionRules[tool] = { ...sessionRules[tool], "*": "allow" };
+		return;
+	}
+	if (choice === alwaysSaveLabel && onSave) {
+		await onSave();
 		return;
 	}
 	if (choice !== "Allow") {
