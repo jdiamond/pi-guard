@@ -81,30 +81,30 @@ function formatLayer(
 	emptyMessage = "(no rules)",
 ): string {
 	if (!rules) {
-		return `${label}:\n  ${emptyMessage}\n\n`;
+		return `${label}:\n  ${emptyMessage}`;
 	}
 
 	if (typeof rules === "string") {
-		return `${label}:\n  ${rules}\n\n`;
+		return `${label}:\n  ${rules}`;
 	}
 
 	const entries = Object.entries(rules);
 	if (entries.length === 0) {
-		return `${label}:\n  ${emptyMessage}\n\n`;
+		return `${label}:\n  ${emptyMessage}`;
 	}
 
-	let output = `${label}:\n`;
+	const lines: string[] = [`${label}:`];
 	for (const [tool, toolRules] of entries) {
 		if (typeof toolRules === "string") {
-			output += `  ${tool}: ${toolRules}\n`;
+			lines.push(`  ${tool}: ${toolRules}`);
 		} else {
-			output += `  ${tool}:\n`;
+			lines.push(`  ${tool}:`);
 			for (const [pattern, action] of Object.entries(toolRules)) {
-				output += `    ${pattern}: ${action}\n`;
+				lines.push(`    ${pattern}: ${action}`);
 			}
 		}
 	}
-	return `${output}\n`;
+	return lines.join("\n");
 }
 
 function buildListOutput(context: GuardContext, cwd: string): string {
@@ -136,30 +136,34 @@ function buildListOutput(context: GuardContext, cwd: string): string {
 		: undefined;
 
 	// Show layers in precedence order: default → user → project → env → profile → session
-	output += formatLayer("default", DEFAULT_CONFIG.rules);
-	output += formatLayer("user", context.config.rules);
-	output += formatLayer(
-		"project",
-		projectRules,
-		projectResult ? undefined : "(no .pi/settings.json)",
-	);
-	output += formatLayer(
-		"environment",
-		envRules,
-		process.env.PI_GUARD ? "(invalid)" : "(not set)",
-	);
+	const layers: string[] = [
+		formatLayer("default", DEFAULT_CONFIG.rules),
+		formatLayer("user", context.config.rules),
+		formatLayer(
+			"project",
+			projectRules,
+			projectResult ? undefined : "(no .pi/settings.json)",
+		),
+		formatLayer(
+			"environment",
+			envRules,
+			process.env.PI_GUARD ? "(invalid)" : "(not set)",
+		),
+	];
 
 	if (context.activeProfile) {
-		output += formatLayer(`profile (${context.activeProfile})`, profileRules);
+		layers.push(
+			formatLayer(`profile (${context.activeProfile})`, profileRules),
+		);
 	}
 
 	const sessionRules =
 		Object.keys(context.sessionRules).length > 0
 			? (context.sessionRules as unknown as Rules)
 			: undefined;
-	output += formatLayer("session", sessionRules as Rules | undefined);
+	layers.push(formatLayer("session", sessionRules as Rules | undefined));
 
-	return output;
+	return output + layers.join("\n\n");
 }
 
 export async function handleGuardCommand(
