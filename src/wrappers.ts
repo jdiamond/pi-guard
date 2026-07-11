@@ -187,16 +187,7 @@ function scanPassthroughBoundary(
 
 		if (!arg.startsWith("-")) break;
 
-		const span = flagSpan(arg, i, args, flagArgs);
-		if (
-			span === 2 &&
-			skipVarAssignments &&
-			isVarAssignment(args[i + 1] ?? "")
-		) {
-			i++;
-		} else {
-			i += span;
-		}
+		i += flagSpan(arg, i, args, flagArgs);
 	}
 	return i;
 }

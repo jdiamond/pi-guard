@@ -212,6 +212,14 @@ test("expandWrapperCommands", async (t) => {
 		]);
 	});
 
+	await t.test("env — flag value that looks like a var assignment", () => {
+		const result = expand("env -u FOO=bar make build");
+		assert.deepEqual(result, [
+			{ name: "env", args: ["-u", "FOO=bar", "make", "build"] },
+			{ name: "make", args: ["build"] },
+		]);
+	});
+
 	// fd -x/--exec
 	await t.test("fd -x — extracts sub-command", () => {
 		const result = expand("fd . -e ts -x rm {}");
