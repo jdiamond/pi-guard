@@ -47,16 +47,6 @@ export interface GuardConfig {
 	shortcuts?: Record<string, string | undefined>;
 }
 
-/** Result of a permission check. */
-export interface PermissionResult {
-	/** Whether to block the tool call */
-	block: boolean;
-	/** Human-readable reason for the decision */
-	reason?: string;
-	/** Context to inject into the tool result */
-	context?: string;
-}
-
 /** Tool call event shape for type-safe matching. */
 export interface ToolCallInput {
 	[key: string]: unknown;
