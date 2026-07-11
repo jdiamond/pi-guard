@@ -84,7 +84,10 @@ async function handleBashParseFailure(
 	}
 
 	pi.events.emit("nudge", { body: "Command needs approval" });
-	pi.events.emit("herdr:blocked", { active: true, label: "Unparseable command" });
+	pi.events.emit("herdr:blocked", {
+		active: true,
+		label: "Unparseable command",
+	});
 	const confirmed = await ctx.ui.confirm(
 		"⚠️ Could Not Parse Command Safely",
 		"\nAllow anyway?",
