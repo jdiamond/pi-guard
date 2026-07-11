@@ -183,6 +183,14 @@ async function handleInteractiveBash(
 	}
 }
 
+/**
+ * Present the approval prompt and handle the user's choice.
+ *
+ * The loop only continues when the user chooses "Always allow" but then
+ * cancels the pattern editor. In that case we return to the prompt so they
+ * can reject instead. There is no iteration cap because the user is in full
+ * control and can break out by selecting "Reject" or "Allow".
+ */
 async function runApprovalLoop(
 	prompt: string,
 	tool: string,

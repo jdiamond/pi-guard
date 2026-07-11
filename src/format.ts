@@ -18,9 +18,13 @@ export function truncate(s: string, maxLength: number): string {
 }
 
 /**
- * Format an extracted command for display.
+ * Format an extracted command for display in an approval prompt.
  *
- * Re-serializes from AST tokens, preserving original quoting via source slices.
+ * The raw command string can be long and hard to scan, so we re-serialize from
+ * AST tokens and elide just enough to fit the prompt while keeping the command
+ * recognizable. This matters because the user needs to see at a glance what is
+ * being executed and whether each line is allowed (✔) or blocked (✖).
+ *
  * The command name is always shown verbatim. If the full command fits, it is
  * shown unchanged. Otherwise, the formatter starts from the full display and
  * shrinks later tokens only as much as needed to fit within maxLength:
@@ -258,9 +262,13 @@ function shrinkToken(spec: TokenSpec, targetLength: number): string {
 
 /**
  * Shrink tokens from right to left until the combined display fits within
- * maxLength. Each token is shrunk only as much as needed, and never below
- * its minimum (elided) length. head strings (name, assignments, etc.) are
- * never shrunk — only the tokenSpecs are.
+ * maxLength.
+ *
+ * The command name and early arguments are usually the most recognizable
+ * parts of a command, so we preserve them and only elide trailing tokens.
+ * Each token is shrunk only as much as needed, and never below its minimum
+ * (elided) length. head strings (name, assignments, etc.) are never shrunk —
+ * only the tokenSpecs are.
  */
 function shrinkTokens(
 	head: string[],
@@ -289,6 +297,12 @@ function shrinkTokens(
 
 /**
  * Path-like detection using character composition.
+ *
+ * A simple "contains /" check would misclassify sed scripts (e.g.
+ * s/foo/bar/), URLs, and flag arguments as paths. We use a high ratio of
+ * path-safe characters and very few spaces so legitimate paths get
+ * path-aware elision while sentences, scripts, and URLs are left alone.
+ *
  * A token is considered path-like if:
  *   - It contains a slash (required)
  *   - It is not a URL (no ://)

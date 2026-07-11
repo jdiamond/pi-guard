@@ -286,6 +286,13 @@ export function loadConfig() {
 	return { config: { ...SAFE_FALLBACK_CONFIG }, envRules };
 }
 
+/**
+ * Sort rules deterministically before persisting.
+ *
+ * User-edited settings.json should stay readable and produce stable diffs,
+ * similar to how npm sorts package.json dependencies on install. Sorting
+ * also makes it easy to scan the file by hand.
+ */
 export function sortRulesKeys(rules: Rules): Rules {
 	if (typeof rules === "string") return rules;
 

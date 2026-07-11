@@ -15,6 +15,13 @@ import type {
 import { parse as parseBash } from "unbash";
 import type { CommandRef } from "./types.ts";
 
+// This module walks the entire bash AST because a permission guard must see
+// every command that the shell will actually execute. Commands can be hidden
+// inside command substitutions ($(...)), process substitutions (<(...)),
+// backticks, heredoc bodies, arithmetic expansions, and various control-flow
+// constructs. Being exhaustive here is intentional; missing a nested command
+// would create a bypass.
+
 export type { CommandRef };
 
 /** Mutable context for tracking group IDs during extraction. */
