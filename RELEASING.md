@@ -13,3 +13,4 @@
    - Remove local path from `~/.pi/agent/settings.json` `packages` array
    - Install: `npm_config_min_release_age=0 pi install npm:pi-guard`
    - Verify with `/guard list` in pi
+   - Clean up and restore local checkout: `pi uninstall npm:pi-guard`, then add local path back to `settings.json` `packages`
