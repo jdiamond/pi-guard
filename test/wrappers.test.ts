@@ -135,7 +135,7 @@ test("expandWrapperCommands", async (t) => {
 			assert.deepEqual(result, [
 				{
 					name: "find",
-					args: [".", "-name", "*.ts", "-exec", "rm", "{}", "\\;"],
+					args: [".", "-name", "*.ts", "-exec", "rm", "{}", ";"],
 				},
 				{ name: "rm", args: ["{}"] },
 			]);
@@ -153,7 +153,7 @@ test("expandWrapperCommands", async (t) => {
 	await t.test("find -ok — extracts sub-command", () => {
 		const result = expand("find . -ok rm {} \\;");
 		assert.deepEqual(result, [
-			{ name: "find", args: [".", "-ok", "rm", "{}", "\\;"] },
+			{ name: "find", args: [".", "-ok", "rm", "{}", ";"] },
 			{ name: "rm", args: ["{}"] },
 		]);
 	});
@@ -161,7 +161,7 @@ test("expandWrapperCommands", async (t) => {
 	await t.test("find -exec with sub-command flags", () => {
 		const result = expand("find . -exec rm -rf {} \\;");
 		assert.deepEqual(result, [
-			{ name: "find", args: [".", "-exec", "rm", "-rf", "{}", "\\;"] },
+			{ name: "find", args: [".", "-exec", "rm", "-rf", "{}", ";"] },
 			{ name: "rm", args: ["-rf", "{}"] },
 		]);
 	});
