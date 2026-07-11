@@ -286,20 +286,29 @@ export function loadConfig() {
 	return { config: { ...SAFE_FALLBACK_CONFIG }, envRules };
 }
 
-export function saveConfig(config: GuardConfig) {
-	try {
-		fs.mkdirSync(AGENT_DIR, { recursive: true });
+export function buildGuardSettings(
+	config: GuardConfig,
+	existing: Record<string, unknown>,
+): Record<string, unknown> {
+	const customMatchers = config.matchers
+		? Object.fromEntries(
+				Object.entries(config.matchers).filter(([key, m]) => {
+					const d =
+						DEFAULT_CONFIG.matchers[
+							key as keyof typeof DEFAULT_CONFIG.matchers
+						];
+					return !d || m.param !== d.param || m.type !== d.type;
+				}),
+			)
+		: undefined;
 
-		let settings: Record<string, unknown> = {};
-		if (fs.existsSync(SETTINGS_PATH)) {
-			settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf-8"));
-		}
-
-		settings.guard = {
+	return {
+		...existing,
+		guard: {
 			enabled: config.enabled,
-			...(config.matchers &&
-				Object.keys(config.matchers).length > 0 && {
-					matchers: config.matchers,
+			...(customMatchers &&
+				Object.keys(customMatchers).length > 0 && {
+					matchers: customMatchers,
 				}),
 			rules: config.rules,
 			...(config.profiles &&
@@ -310,7 +319,20 @@ export function saveConfig(config: GuardConfig) {
 				Object.keys(config.shortcuts).length > 0 && {
 					shortcuts: config.shortcuts,
 				}),
-		};
+		},
+	};
+}
+
+export function saveConfig(config: GuardConfig) {
+	try {
+		fs.mkdirSync(AGENT_DIR, { recursive: true });
+
+		let settings: Record<string, unknown> = {};
+		if (fs.existsSync(SETTINGS_PATH)) {
+			settings = JSON.parse(fs.readFileSync(SETTINGS_PATH, "utf-8"));
+		}
+
+		settings = buildGuardSettings(config, settings);
 
 		fs.writeFileSync(SETTINGS_PATH, JSON.stringify(settings, null, 2), "utf-8");
 	} catch (e) {

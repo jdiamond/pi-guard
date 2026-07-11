@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
 	buildEffectiveRules,
+	buildGuardSettings,
 	getGuardConfigFromSettings,
 	validateLoadedGuardConfig,
 	validateToolRules,
@@ -198,6 +199,135 @@ test("getGuardConfigFromSettings", async (t) => {
 		const result = getGuardConfigFromSettings({ guard: null });
 		assert.equal(result.config.enabled, true);
 		assert.ok(result.warning);
+	});
+});
+
+test("buildGuardSettings", async (t) => {
+	function guard(s: Record<string, unknown>) {
+		const g = s.guard;
+		assert.ok(g !== null && typeof g === "object" && !Array.isArray(g));
+		return g as Record<string, unknown>;
+	}
+
+	await t.test("omits matchers when only defaults are present", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				matchers: DEFAULT_CONFIG.matchers,
+				rules: { git_status: "allow" },
+			},
+			{},
+		);
+		assert.equal(guard(result).enabled, true);
+		assert.equal(guard(result).matchers, undefined);
+		assert.deepEqual(guard(result).rules, { git_status: "allow" });
+	});
+
+	await t.test(
+		"preserves only non-default matchers when custom ones exist",
+		() => {
+			const result = buildGuardSettings(
+				{
+					enabled: true,
+					matchers: {
+						...DEFAULT_CONFIG.matchers,
+						my_tool: { param: "input", type: "exact" },
+					},
+					rules: {},
+				},
+				{},
+			);
+			assert.deepEqual(guard(result).matchers, {
+				my_tool: { param: "input", type: "exact" },
+			});
+		},
+	);
+
+	await t.test(
+		"preserves only non-default matchers with no defaults present",
+		() => {
+			const result = buildGuardSettings(
+				{
+					enabled: true,
+					matchers: {
+						my_tool: { param: "input", type: "exact" },
+					},
+					rules: {},
+				},
+				{},
+			);
+			assert.deepEqual(guard(result).matchers, {
+				my_tool: { param: "input", type: "exact" },
+			});
+		},
+	);
+
+	await t.test("writes an overridden default matcher", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				matchers: {
+					...DEFAULT_CONFIG.matchers,
+					bash: { param: "rawCommand", type: "bash" },
+				},
+				rules: {},
+			},
+			{},
+		);
+		assert.deepEqual(guard(result).matchers, {
+			bash: { param: "rawCommand", type: "bash" },
+		});
+	});
+
+	await t.test("preserves existing non-guard keys", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				matchers: DEFAULT_CONFIG.matchers,
+				rules: {},
+			},
+			{ theme: "dark", window: { width: 100 } },
+		);
+		assert.equal(result.theme, "dark");
+		assert.deepEqual(result.window, { width: 100 });
+		assert.deepEqual(guard(result).rules, {});
+	});
+
+	await t.test("writes profiles when present", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				matchers: DEFAULT_CONFIG.matchers,
+				rules: {},
+				profiles: { strict: { bash: "deny" } },
+			},
+			{},
+		);
+		assert.deepEqual(guard(result).profiles, { strict: { bash: "deny" } });
+	});
+
+	await t.test("writes shortcuts when present", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				matchers: DEFAULT_CONFIG.matchers,
+				rules: {},
+				shortcuts: { off: "disable" },
+			},
+			{},
+		);
+		assert.deepEqual(guard(result).shortcuts, { off: "disable" });
+	});
+
+	await t.test("omits matchers when config has no matchers field", () => {
+		const result = buildGuardSettings(
+			{
+				enabled: true,
+				rules: {},
+			},
+			{},
+		);
+		assert.equal(guard(result).matchers, undefined);
 	});
 });
 
