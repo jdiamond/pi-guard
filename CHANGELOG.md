@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Custom TUI approval dialog** — Replaced the built-in `ctx.ui.select` prompt
+  with a custom pi-tui component. The dialog shows a styled title, optional body,
+  and command list with `SelectList` choices at the bottom. Allowed commands are
+  rendered in the success color, unallowed commands in the error color, and all
+  content is left-aligned inside a bordered frame.
 - **Persistent bash rules and command-level session rules** — New "Always allow
   (save to settings.json)" option persists patterns to `~/.pi/agent/settings.json`.
   Both session and persistent options now open an editor pre-filled with
