@@ -187,8 +187,8 @@ async function handleInteractiveBash(
 	const uniqueBaseNames = Array.from(
 		new Set(unauthorizedCommands.map(getCommandName)),
 	);
-	const alwaysLabel = `Always allow ${uniqueBaseNames.join(", ")} (this session)`;
-	const alwaysSaveLabel = `Always allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
+	const temporaryAllowLabel = `Temporarily allow ${uniqueBaseNames.join(", ")} (this session only)`;
+	const permanentAllowLabel = `Permanently allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
 
 	const promptData = buildApprovalPromptData(
 		allCommands,
@@ -201,8 +201,8 @@ async function handleInteractiveBash(
 		runApprovalLoop(
 			promptData,
 			tool,
-			alwaysLabel,
-			alwaysSaveLabel,
+			temporaryAllowLabel,
+			permanentAllowLabel,
 			unauthorizedCommands,
 			ctx,
 			sessionRules,
@@ -222,8 +222,8 @@ async function handleInteractiveBash(
 async function runApprovalLoop(
 	promptData: ApprovalPromptData,
 	tool: string,
-	alwaysLabel: string,
-	alwaysSaveLabel: string,
+	temporaryAllowLabel: string,
+	permanentAllowLabel: string,
 	unauthorizedCommands: CommandRef[],
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
@@ -232,12 +232,12 @@ async function runApprovalLoop(
 	while (true) {
 		const choice = await showApprovalDialog(ctx, promptData, [
 			"Allow",
-			alwaysLabel,
-			alwaysSaveLabel,
+			temporaryAllowLabel,
+			permanentAllowLabel,
 			"Reject",
 		]);
 
-		if (choice === alwaysLabel) {
+		if (choice === temporaryAllowLabel) {
 			if (
 				await handleSessionPatterns(
 					unauthorizedCommands,
@@ -251,7 +251,7 @@ async function runApprovalLoop(
 			continue;
 		}
 
-		if (choice === alwaysSaveLabel) {
+		if (choice === permanentAllowLabel) {
 			if (
 				await handleSavePatterns(unauthorizedCommands, ctx, onSaveBashRules)
 			) {
@@ -357,19 +357,19 @@ async function handleToolApproval(
 			reason: "[Blocked by pi-guard: No interactive session available]",
 		};
 	}
-	const alwaysLabel = `Always allow ${tool} (this session)`;
-	const alwaysSaveLabel = `Always allow ${tool} (save to settings.json)`;
-	const choices = ["Allow", alwaysLabel];
-	if (onSave) choices.push(alwaysSaveLabel);
+	const temporaryAllowLabel = `Temporarily allow ${tool} (this session only)`;
+	const permanentAllowLabel = `Permanently allow ${tool} (save to settings.json)`;
+	const choices = ["Allow", temporaryAllowLabel];
+	if (onSave) choices.push(permanentAllowLabel);
 	choices.push("Reject");
 	const choice = await withBlockedUi(pi, `${tool} approval`, () =>
 		showApprovalDialog(ctx, promptData, choices),
 	);
-	if (choice === alwaysLabel) {
+	if (choice === temporaryAllowLabel) {
 		sessionRules[tool] = { ...sessionRules[tool], "*": "allow" };
 		return;
 	}
-	if (choice === alwaysSaveLabel && onSave) {
+	if (choice === permanentAllowLabel && onSave) {
 		await onSave();
 		return;
 	}

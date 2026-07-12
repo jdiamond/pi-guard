@@ -11,6 +11,9 @@ All notable changes to this project will be documented in this file.
   and command list with `SelectList` choices at the bottom. Allowed commands are
   rendered in the success color, unallowed commands in the error color, and all
   content is left-aligned inside a bordered frame.
+- **Clearer approval choice labels** — The "Always allow" options are now labeled
+  "Temporarily allow ... (this session only)" and "Permanently allow ... (save to
+  settings.json)", making them easier to distinguish from "Allow" at a glance.
 - **Persistent bash rules and command-level session rules** — New "Always allow
   (save to settings.json)" option persists patterns to `~/.pi/agent/settings.json`.
   Both session and persistent options now open an editor pre-filled with
