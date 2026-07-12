@@ -3,6 +3,7 @@ import type {
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
 import { parse as parseBash, type Script } from "unbash";
+import { ApprovalDialog } from "./components/approval-dialog.ts";
 import { extractAllCommandsFromAST } from "./extract.ts";
 import {
 	resolveBashAction,
@@ -10,9 +11,10 @@ import {
 	resolveGlobAction,
 } from "./matching.ts";
 import {
-	buildApprovalPrompt,
-	buildCustomApprovalPrompt,
-	buildFileApprovalPrompt,
+	type ApprovalPromptData,
+	buildApprovalPromptData,
+	buildCustomApprovalPromptData,
+	buildFileApprovalPromptData,
 } from "./prompt.ts";
 import { getCommandArgs, getCommandName, isBareAssignment } from "./resolve.ts";
 import type { Action, CommandRef, ToolCallInput } from "./types.ts";
@@ -32,6 +34,28 @@ async function withBlockedUi<T>(
 	}
 }
 
+async function showApprovalDialog(
+	ctx: ExtensionContext,
+	promptData: ApprovalPromptData,
+	choices: string[],
+): Promise<string | undefined> {
+	return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
+		const dialog = new ApprovalDialog(theme, {
+			data: promptData,
+			choices,
+			onChoice: done,
+		});
+		return {
+			render: (width) => dialog.render(width),
+			handleInput: (data) => {
+				dialog.handleInput(data);
+				tui.requestRender();
+			},
+			invalidate: () => dialog.invalidate(),
+		};
+	});
+}
+
 export async function handleInteractiveApproval(
 	pi: ExtensionAPI,
 	tool: string,
@@ -46,7 +70,7 @@ export async function handleInteractiveApproval(
 		"ask",
 		ctx,
 		sessionRules,
-		buildCustomApprovalPrompt(tool, input),
+		buildCustomApprovalPromptData(tool, input),
 		onSave,
 	);
 }
@@ -166,7 +190,7 @@ async function handleInteractiveBash(
 	const alwaysLabel = `Always allow ${uniqueBaseNames.join(", ")} (this session)`;
 	const alwaysSaveLabel = `Always allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
 
-	const prompt = buildApprovalPrompt(
+	const promptData = buildApprovalPromptData(
 		allCommands,
 		unauthorizedCommands,
 		undefined,
@@ -175,7 +199,7 @@ async function handleInteractiveBash(
 
 	return withBlockedUi(pi, "Command approval", () =>
 		runApprovalLoop(
-			prompt,
+			promptData,
 			tool,
 			alwaysLabel,
 			alwaysSaveLabel,
@@ -196,7 +220,7 @@ async function handleInteractiveBash(
  * control and can break out by selecting "Reject" or "Allow".
  */
 async function runApprovalLoop(
-	prompt: string,
+	promptData: ApprovalPromptData,
 	tool: string,
 	alwaysLabel: string,
 	alwaysSaveLabel: string,
@@ -206,7 +230,7 @@ async function runApprovalLoop(
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	while (true) {
-		const choice = await ctx.ui.select(prompt, [
+		const choice = await showApprovalDialog(ctx, promptData, [
 			"Allow",
 			alwaysLabel,
 			alwaysSaveLabel,
@@ -320,7 +344,7 @@ async function handleToolApproval(
 	action: Action | undefined,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
-	prompt: string,
+	promptData: ApprovalPromptData,
 	onSave?: () => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	if (action === "allow") return;
@@ -339,7 +363,7 @@ async function handleToolApproval(
 	if (onSave) choices.push(alwaysSaveLabel);
 	choices.push("Reject");
 	const choice = await withBlockedUi(pi, `${tool} approval`, () =>
-		ctx.ui.select(prompt, choices),
+		showApprovalDialog(ctx, promptData, choices),
 	);
 	if (choice === alwaysLabel) {
 		sessionRules[tool] = { ...sessionRules[tool], "*": "allow" };
@@ -371,7 +395,7 @@ export async function handleGlobTool(
 		resolveGlobAction(path, toolRules),
 		ctx,
 		sessionRules,
-		buildFileApprovalPrompt(tool, path),
+		buildFileApprovalPromptData(tool, path),
 	);
 }
 
@@ -390,6 +414,6 @@ export async function handleExactTool(
 		resolveExactAction(value, toolRules),
 		ctx,
 		sessionRules,
-		buildCustomApprovalPrompt(tool, input),
+		buildCustomApprovalPromptData(tool, input),
 	);
 }

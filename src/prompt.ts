@@ -7,56 +7,73 @@ export interface ApprovalPromptOptions {
 	argMaxLength?: number;
 }
 
-export function buildApprovalPrompt(
+export interface ApprovalCommandLine {
+	text: string;
+	allowed: boolean;
+	joiner?: string | undefined;
+}
+
+export interface ApprovalPromptData {
+	title: string;
+	body?: string;
+	commands: ApprovalCommandLine[];
+}
+
+export function buildApprovalPromptData(
 	allCommands: CommandRef[],
 	unauthorizedCommands: CommandRef[],
 	options?: ApprovalPromptOptions,
 	expandedWrappers?: Set<CommandRef>,
-): string {
+): ApprovalPromptData {
 	const unauthorizedSet = new Set(unauthorizedCommands);
-	const lines: string[] = [];
+	const commands: ApprovalCommandLine[] = [];
 
 	let prevGroup: number | undefined;
 
 	for (const command of allCommands) {
 		// Insert blank line between groups
 		if (prevGroup !== undefined && command.group !== prevGroup) {
-			lines.push("");
+			commands.push({ text: "", allowed: true });
 		}
 		prevGroup = command.group;
 
-		const marker = unauthorizedSet.has(command) ? "✖" : "✔";
+		const allowed = !unauthorizedSet.has(command);
 		const display = expandedWrappers?.has(command)
 			? formatWrapperDisplay(command)
 			: formatCommand(command, options);
-		const line = `${marker} ${display}`;
-		lines.push(command.joiner ? `${line} ${command.joiner}` : line);
+		const line: ApprovalCommandLine = { text: display, allowed };
+		if (command.joiner) line.joiner = command.joiner;
+		commands.push(line);
 	}
 
-	return ["⚠️ Unapproved Commands", "", ...lines].join("\n");
+	return { title: "⚠️ Unapproved Commands", commands };
 }
 
-/** Build prompt for file operations (read/edit/write). */
-export function buildFileApprovalPrompt(
+/** Build prompt data for file operations (read/edit/write). */
+export function buildFileApprovalPromptData(
 	tool: string,
 	path: string,
-	options?: { maxLength?: number },
-): string {
-	const maxLength = options?.maxLength ?? 120;
-	return `⚠️ ${tool.charAt(0).toUpperCase() + tool.slice(1)} Permission Required\n\n${truncate(path, maxLength)}`;
+): ApprovalPromptData {
+	return {
+		title: `⚠️ ${tool.charAt(0).toUpperCase() + tool.slice(1)} Permission Required`,
+		body: path,
+		commands: [],
+	};
 }
 
-/** Build prompt for custom tools showing all input parameters. */
-export function buildCustomApprovalPrompt(
+/** Build prompt data for custom tools showing all input parameters. */
+export function buildCustomApprovalPromptData(
 	tool: string,
 	input: Record<string, unknown>,
-	options?: { maxLength?: number; valueMaxLength?: number },
-): string {
+	options?: { valueMaxLength?: number },
+): ApprovalPromptData {
 	const valueMaxLength = options?.valueMaxLength ?? 200;
-	const header = `⚠️ ${tool} Permission Required`;
 	const params = formatParams(input, valueMaxLength);
-	if (!params) return `${header}\n\n(no parameters)`;
-	return [header, "", params].join("\n");
+	return {
+		title: `⚠️ ${tool} Permission Required`,
+		body: params ?? "(no parameters)",
+		commands: [],
+	};
 }
 
 function formatParams(

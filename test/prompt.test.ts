@@ -4,9 +4,9 @@ import { parse as parseBash } from "unbash";
 import { extractAllCommandsFromAST } from "../src/extract.ts";
 import { resolveBashAction } from "../src/matching.ts";
 import {
-	buildApprovalPrompt,
-	buildCustomApprovalPrompt,
-	buildFileApprovalPrompt,
+	buildApprovalPromptData,
+	buildCustomApprovalPromptData,
+	buildFileApprovalPromptData,
 } from "../src/prompt.ts";
 import { getCommandArgs, getCommandName } from "../src/resolve.ts";
 
@@ -14,7 +14,7 @@ function extract(raw: string) {
 	return extractAllCommandsFromAST(parseBash(raw), raw);
 }
 
-test("buildApprovalPrompt", async (t) => {
+test("buildApprovalPromptData", async (t) => {
 	await t.test(
 		"shows allowed commands for context alongside unapproved ones",
 		() => {
@@ -27,18 +27,20 @@ test("buildApprovalPrompt", async (t) => {
 				return resolveBashAction(name, args, { cd: "allow" }) !== "allow";
 			});
 
-			assert.equal(
-				buildApprovalPrompt(commands, unauthorized, {
-					maxLength: 40,
-					argMaxLength: 40,
-				}),
-				[
-					"⚠️ Unapproved Commands",
-					"",
-					"✔ cd /Users/jdiamond/code/pi-nudge &&",
-					"✖ npx tsc --noEmit 2>&1",
-				].join("\n"),
-			);
+			const data = buildApprovalPromptData(commands, unauthorized, {
+				maxLength: 40,
+				argMaxLength: 40,
+			});
+
+			assert.equal(data.title, "⚠️ Unapproved Commands");
+			assert.deepEqual(data.commands, [
+				{
+					text: "cd /Users/jdiamond/code/pi-nudge",
+					allowed: true,
+					joiner: "&&",
+				},
+				{ text: "npx tsc --noEmit 2>&1", allowed: false },
+			]);
 		},
 	);
 
@@ -52,19 +54,16 @@ test("buildApprovalPrompt", async (t) => {
 				return resolveBashAction(name, args, { echo: "allow" }) !== "allow";
 			});
 
-			assert.equal(
-				buildApprovalPrompt(commands, unauthorized, {
-					maxLength: 200,
-					argMaxLength: 200,
-				}),
-				[
-					"⚠️ Unapproved Commands",
-					"",
-					"✔ echo ok &&",
-					"✖ npm test &&",
-					"✖ npm test",
-				].join("\n"),
-			);
+			const data = buildApprovalPromptData(commands, unauthorized, {
+				maxLength: 200,
+				argMaxLength: 200,
+			});
+
+			assert.deepEqual(data.commands, [
+				{ text: "echo ok", allowed: true, joiner: "&&" },
+				{ text: "npm test", allowed: false, joiner: "&&" },
+				{ text: "npm test", allowed: false },
+			]);
 		},
 	);
 
@@ -76,16 +75,12 @@ test("buildApprovalPrompt", async (t) => {
 			return resolveBashAction(name, args, { cat: "allow" }) !== "allow";
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			[
-				"⚠️ Unapproved Commands",
-				"",
-				"✔ cat foo |",
-				"✖ grep bar |",
-				"✖ wc -l",
-			].join("\n"),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "cat foo", allowed: true, joiner: "|" },
+			{ text: "grep bar", allowed: false, joiner: "|" },
+			{ text: "wc -l", allowed: false },
+		]);
 	});
 
 	await t.test("shows || joiners", () => {
@@ -96,12 +91,11 @@ test("buildApprovalPrompt", async (t) => {
 			return resolveBashAction(name, args, {}) !== "allow";
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			["⚠️ Unapproved Commands", "", "✖ git commit ||", "✖ echo fail"].join(
-				"\n",
-			),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "git commit", allowed: false, joiner: "||" },
+			{ text: "echo fail", allowed: false },
+		]);
 	});
 
 	await t.test("shows ; joiners for sequential commands", () => {
@@ -112,10 +106,11 @@ test("buildApprovalPrompt", async (t) => {
 			return resolveBashAction(name, args, { cd: "allow" }) !== "allow";
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			["⚠️ Unapproved Commands", "", "✔ cd foo ;", "✖ rm bar"].join("\n"),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "cd foo", allowed: true, joiner: ";" },
+			{ text: "rm bar", allowed: false },
+		]);
 	});
 
 	await t.test("separates groups with blank lines", () => {
@@ -127,12 +122,12 @@ test("buildApprovalPrompt", async (t) => {
 			return true; // all unauthorized for simplicity
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			["⚠️ Unapproved Commands", "", "✖ echo $(...)", "", "✖ sort out"].join(
-				"\n",
-			),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "echo $(...)", allowed: false },
+			{ text: "", allowed: true },
+			{ text: "sort out", allowed: false },
+		]);
 	});
 
 	await t.test("shows joiners inside subshell", () => {
@@ -144,17 +139,13 @@ test("buildApprovalPrompt", async (t) => {
 			return true;
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			[
-				"⚠️ Unapproved Commands",
-				"",
-				"✖ echo $(...)",
-				"",
-				"✖ cat foo |",
-				"✖ grep bar",
-			].join("\n"),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "echo $(...)", allowed: false },
+			{ text: "", allowed: true },
+			{ text: "cat foo", allowed: false, joiner: "|" },
+			{ text: "grep bar", allowed: false },
+		]);
 	});
 
 	await t.test("shows bare assignment with joiner", () => {
@@ -171,93 +162,94 @@ test("buildApprovalPrompt", async (t) => {
 			return resolveBashAction(name, args, { "*": "ask" }) !== "allow";
 		});
 
-		assert.equal(
-			buildApprovalPrompt(commands, unauthorized),
-			[
-				"⚠️ Unapproved Commands",
-				"",
-				"✔ TOKEN=$(...) &&",
-				"",
-				"✖ curl -s https://auth.example.com/token |",
-				"✖ jq -r .access_token",
-				"",
-				'✖ curl -H "Authorization: Bearer $TOKEN" https://api.example.com/data',
-			].join("\n"),
-		);
+		const data = buildApprovalPromptData(commands, unauthorized);
+		assert.deepEqual(data.commands, [
+			{ text: "TOKEN=$(...)", allowed: true, joiner: "&&" },
+			{ text: "", allowed: true },
+			{
+				text: "curl -s https://auth.example.com/token",
+				allowed: false,
+				joiner: "|",
+			},
+			{ text: "jq -r .access_token", allowed: false },
+			{ text: "", allowed: true },
+			{
+				text: 'curl -H "Authorization: Bearer $TOKEN" https://api.example.com/data',
+				allowed: false,
+			},
+		]);
 	});
 });
 
-test("buildFileApprovalPrompt", async (t) => {
+test("buildFileApprovalPromptData", async (t) => {
 	await t.test("formats read prompts", () => {
-		const prompt = buildFileApprovalPrompt("read", "/path/to/file.ts");
-		assert.equal(prompt, "⚠️ Read Permission Required\n\n/path/to/file.ts");
+		const data = buildFileApprovalPromptData("read", "/path/to/file.ts");
+		assert.equal(data.title, "⚠️ Read Permission Required");
+		assert.equal(data.body, "/path/to/file.ts");
+		assert.deepEqual(data.commands, []);
 	});
 
 	await t.test("formats edit prompts", () => {
-		const prompt = buildFileApprovalPrompt("edit", "/path/to/file.ts");
-		assert.equal(prompt, "⚠️ Edit Permission Required\n\n/path/to/file.ts");
+		const data = buildFileApprovalPromptData("edit", "/path/to/file.ts");
+		assert.equal(data.title, "⚠️ Edit Permission Required");
+		assert.equal(data.body, "/path/to/file.ts");
 	});
 
 	await t.test("formats write prompts", () => {
-		const prompt = buildFileApprovalPrompt("write", "/path/to/file.ts");
-		assert.equal(prompt, "⚠️ Write Permission Required\n\n/path/to/file.ts");
+		const data = buildFileApprovalPromptData("write", "/path/to/file.ts");
+		assert.equal(data.title, "⚠️ Write Permission Required");
+		assert.equal(data.body, "/path/to/file.ts");
 	});
 
-	await t.test("truncates long paths", () => {
+	await t.test("preserves long paths", () => {
 		const longPath = "/".repeat(150);
-		const prompt = buildFileApprovalPrompt("read", longPath, { maxLength: 50 });
-		assert.ok(prompt.includes("…"));
-		assert.ok(prompt.length < 200); // Should be truncated
+		const data = buildFileApprovalPromptData("read", longPath);
+		assert.equal(data.body, longPath);
 	});
 });
 
-test("buildCustomApprovalPrompt", async (t) => {
+test("buildCustomApprovalPromptData", async (t) => {
 	await t.test("formats custom tool prompts with all params", () => {
-		const prompt = buildCustomApprovalPrompt("webfetch", {
+		const data = buildCustomApprovalPromptData("webfetch", {
 			url: "https://example.com",
 		});
-		assert.equal(
-			prompt,
-			"⚠️ webfetch Permission Required\n\nurl: https://example.com",
-		);
+		assert.equal(data.title, "⚠️ webfetch Permission Required");
+		assert.equal(data.body, "url: https://example.com");
 	});
 
 	await t.test("shows multiple parameters", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			number: 1,
 			body: "hello world",
 		});
-		assert.equal(
-			prompt,
-			"⚠️ my_tool Permission Required\n\nnumber: 1\nbody: hello world",
-		);
+		assert.equal(data.body, "number: 1\nbody: hello world");
 	});
 
 	await t.test("skips undefined parameters", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			number: 1,
 			workingDir: undefined,
 		});
-		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nnumber: 1");
+		assert.equal(data.body, "number: 1");
 	});
 
 	await t.test("formats arrays", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			files: ["a.ts", "b.ts"],
 		});
-		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nfiles: a.ts, b.ts");
+		assert.equal(data.body, "files: a.ts, b.ts");
 	});
 
 	await t.test("formats booleans", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			draft: true,
 		});
-		assert.equal(prompt, "⚠️ my_tool Permission Required\n\ndraft: true");
+		assert.equal(data.body, "draft: true");
 	});
 
 	await t.test("truncates long values", () => {
 		const longBody = "a".repeat(150);
-		const prompt = buildCustomApprovalPrompt(
+		const data = buildCustomApprovalPromptData(
 			"webfetch",
 			{
 				body: longBody,
@@ -266,22 +258,22 @@ test("buildCustomApprovalPrompt", async (t) => {
 				valueMaxLength: 20,
 			},
 		);
-		assert.ok(prompt.includes("…"));
-		assert.ok(prompt.length < 100);
+		assert.ok(data.body?.includes("…"));
+		assert.ok(data.body && data.body.length < 100);
 	});
 
 	await t.test("shows null values", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			value: null,
 		});
-		assert.equal(prompt, "⚠️ my_tool Permission Required\n\nvalue: null");
+		assert.equal(data.body, "value: null");
 	});
 
 	await t.test("shows placeholder when all params are undefined", () => {
-		const prompt = buildCustomApprovalPrompt("my_tool", {
+		const data = buildCustomApprovalPromptData("my_tool", {
 			a: undefined,
 			b: undefined,
 		});
-		assert.equal(prompt, "⚠️ my_tool Permission Required\n\n(no parameters)");
+		assert.equal(data.body, "(no parameters)");
 	});
 });
