@@ -99,7 +99,7 @@ export class ApprovalDialog {
 			this.container.addChild(
 				new Text(
 					this.theme.fg(
-						command.allowed ? "success" : "error",
+						command.allowed ? "success" : "warning",
 						this.truncate(formatCommandLine(command), width),
 					),
 					HORIZONTAL_PADDING,

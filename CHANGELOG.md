@@ -9,7 +9,7 @@ All notable changes to this project will be documented in this file.
 - **Custom TUI approval dialog** — Replaced the built-in `ctx.ui.select` prompt
   with a custom pi-tui component. The dialog shows a styled title, optional body,
   and command list with `SelectList` choices at the bottom. Allowed commands are
-  rendered in the success color, unallowed commands in the error color, and all
+  rendered in the success color, unallowed commands in the warning color, and all
   content is left-aligned inside a bordered frame.
 - **Clearer approval choice labels** — The "Always allow" options are now labeled
   "Temporarily allow ... (this session only)" and "Permanently allow ... (save to
