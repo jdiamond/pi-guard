@@ -147,7 +147,8 @@ export class ApprovalDialog {
 }
 
 function formatCommandLine(command: ApprovalCommandLine): string {
+	const indent = "  ".repeat(command.indent ?? 0);
 	const prefix = command.allowed ? "✔ " : "✖ ";
 	const joiner = command.joiner ? ` ${command.joiner}` : "";
-	return `${prefix}${command.text}${joiner}`;
+	return `${indent}${prefix}${command.text}${joiner}`;
 }

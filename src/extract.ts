@@ -27,16 +27,19 @@ export type { CommandRef };
 /** Mutable context for tracking group IDs during extraction. */
 export interface ExtractCtx {
 	nextGroupId: number;
+	groupParents: Map<number, number | undefined>;
 }
 
 /** Create a new extraction context starting at groupId 0. */
 export function createExtractCtx(): ExtractCtx {
-	return { nextGroupId: 0 };
+	return { nextGroupId: 0, groupParents: new Map() };
 }
 
 /** Allocate the next group ID from the context. */
-function allocGroupId(ctx: ExtractCtx): number {
-	return ctx.nextGroupId++;
+function allocGroupId(ctx: ExtractCtx, parentGroup?: number): number {
+	const groupId = ctx.nextGroupId++;
+	ctx.groupParents.set(groupId, parentGroup);
+	return groupId;
 }
 
 /** Find the last CommandRef in commands that has the given group,
@@ -260,7 +263,13 @@ function collectCommand(
 	ctx: ExtractCtx,
 ) {
 	if (node.name || node.prefix.length > 0) {
-		commands.push({ node, source, group: groupId });
+		const parentGroup = ctx.groupParents.get(groupId);
+		commands.push({
+			node,
+			source,
+			group: groupId,
+			...(parentGroup === undefined ? {} : { parentGroup }),
+		});
 	}
 
 	for (const prefix of node.prefix) {
@@ -341,7 +350,7 @@ function collectWordPart(
 		case "CommandExpansion":
 		case "ProcessSubstitution": {
 			// Commands inside expansions get their own group
-			const expansionGroup = allocGroupId(ctx);
+			const expansionGroup = allocGroupId(ctx, groupId);
 			if (part.script) {
 				// unbash 4.x keeps script positions absolute. Re-parse the inner
 				// source to get a fresh AST with positions relative to inner text.
@@ -501,7 +510,7 @@ function collectArithmeticExpression(
 			return;
 		case "ArithmeticCommandExpansion": {
 			// Commands inside arithmetic expansions get their own group
-			const expansionGroup = allocGroupId(ctx);
+			const expansionGroup = allocGroupId(ctx, groupId);
 			if (expr.script) {
 				// unbash 4.x keeps script positions absolute. Re-parse the inner
 				// source to get a fresh AST with positions relative to inner text.

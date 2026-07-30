@@ -110,7 +110,10 @@ export function expandWrapperCommands(commands: CommandRef[]): ExpansionResult {
 		(max, cmd) => Math.max(max, cmd.group ?? 0),
 		-1,
 	);
-	const ctx: ExtractCtx = { nextGroupId: maxGroupId + 1 };
+	const ctx: ExtractCtx = {
+		nextGroupId: maxGroupId + 1,
+		groupParents: new Map(),
+	};
 	const result = doExpand(commands, expandedWrappers, ctx);
 	return { commands: result, expandedWrappers };
 }

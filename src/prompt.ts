@@ -10,6 +10,7 @@ export interface ApprovalPromptOptions {
 export interface ApprovalCommandLine {
 	text: string;
 	allowed: boolean;
+	indent?: number | undefined;
 	joiner?: string | undefined;
 }
 
@@ -27,26 +28,43 @@ export function buildApprovalPromptData(
 ): ApprovalPromptData {
 	const unauthorizedSet = new Set(unauthorizedCommands);
 	const commands: ApprovalCommandLine[] = [];
-
-	let prevGroup: number | undefined;
+	const groupParents = new Map<number, number>();
+	for (const command of allCommands) {
+		if (command.parentGroup !== undefined) {
+			groupParents.set(command.group, command.parentGroup);
+		}
+	}
 
 	for (const command of allCommands) {
-		// Insert blank line between groups
-		if (prevGroup !== undefined && command.group !== prevGroup) {
-			commands.push({ text: "", allowed: true });
-		}
-		prevGroup = command.group;
-
 		const allowed = !unauthorizedSet.has(command);
 		const display = expandedWrappers?.has(command)
 			? formatWrapperDisplay(command)
 			: formatCommand(command, options);
+		const indent = groupNestingDepth(command.group, groupParents);
 		const line: ApprovalCommandLine = { text: display, allowed };
+		if (indent > 0) line.indent = indent;
 		if (command.joiner) line.joiner = command.joiner;
 		commands.push(line);
 	}
 
 	return { title: "⚠️ Unapproved Commands", commands };
+}
+
+function groupNestingDepth(
+	group: number,
+	groupParents: ReadonlyMap<number, number>,
+): number {
+	let depth = 0;
+	let current = group;
+	const visited = new Set<number>();
+	while (groupParents.has(current) && !visited.has(current)) {
+		visited.add(current);
+		depth++;
+		const parent = groupParents.get(current);
+		if (parent === undefined) break;
+		current = parent;
+	}
+	return depth;
 }
 
 /** Build prompt data for file operations (read/edit/write). */

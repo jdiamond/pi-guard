@@ -6,6 +6,11 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Nested command indentation in approval prompts** — Commands inside shell expansions such as `$()` and backticks now appear directly below and indented beneath their containing command, replacing the blank-line separation that disconnected them visually.
+  ```
+  ✔ TOKEN=$(...) &&
+    ✖ gcloud auth print-access-token
+  ```
 - **Custom TUI approval dialog** — Replaced the built-in `ctx.ui.select` prompt
   with a custom pi-tui component. The dialog shows a styled title, optional body,
   and command list with `SelectList` choices at the bottom. Allowed commands are

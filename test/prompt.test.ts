@@ -113,8 +113,8 @@ test("buildApprovalPromptData", async (t) => {
 		]);
 	});
 
-	await t.test("separates groups with blank lines", () => {
-		// echo $(sort out) — echo and sort should be in different groups
+	await t.test("indents commands inside shell expansions", () => {
+		// echo $(sort out) — sort is shown as a child of echo
 		const commands = extract("echo $(sort out)");
 		const unauthorized = commands.filter((cmd) => {
 			const _name = getCommandName(cmd);
@@ -125,8 +125,18 @@ test("buildApprovalPromptData", async (t) => {
 		const data = buildApprovalPromptData(commands, unauthorized);
 		assert.deepEqual(data.commands, [
 			{ text: "echo $(...)", allowed: false },
-			{ text: "", allowed: true },
-			{ text: "sort out", allowed: false },
+			{ text: "sort out", allowed: false, indent: 1 },
+		]);
+	});
+
+	await t.test("indents nested shell expansions recursively", () => {
+		const commands = extract("echo $(echo $(date -u))");
+		const data = buildApprovalPromptData(commands, commands);
+
+		assert.deepEqual(data.commands, [
+			{ text: "echo $(...)", allowed: false },
+			{ text: "echo $(...)", allowed: false, indent: 1 },
+			{ text: "date -u", allowed: false, indent: 2 },
 		]);
 	});
 
@@ -142,9 +152,8 @@ test("buildApprovalPromptData", async (t) => {
 		const data = buildApprovalPromptData(commands, unauthorized);
 		assert.deepEqual(data.commands, [
 			{ text: "echo $(...)", allowed: false },
-			{ text: "", allowed: true },
-			{ text: "cat foo", allowed: false, joiner: "|" },
-			{ text: "grep bar", allowed: false },
+			{ text: "cat foo", allowed: false, indent: 1, joiner: "|" },
+			{ text: "grep bar", allowed: false, indent: 1 },
 		]);
 	});
 
@@ -165,14 +174,13 @@ test("buildApprovalPromptData", async (t) => {
 		const data = buildApprovalPromptData(commands, unauthorized);
 		assert.deepEqual(data.commands, [
 			{ text: "TOKEN=$(...)", allowed: true, joiner: "&&" },
-			{ text: "", allowed: true },
 			{
 				text: "curl -s https://auth.example.com/token",
 				allowed: false,
+				indent: 1,
 				joiner: "|",
 			},
-			{ text: "jq -r .access_token", allowed: false },
-			{ text: "", allowed: true },
+			{ text: "jq -r .access_token", allowed: false, indent: 1 },
 			{
 				text: 'curl -H "Authorization: Bearer $TOKEN" https://api.example.com/data',
 				allowed: false,

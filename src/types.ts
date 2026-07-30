@@ -4,9 +4,10 @@ import type { Command } from "unbash";
 export interface CommandRef {
 	node: Command;
 	source: string;
-	/** Group ID: commands in the same group are connected by operators
-	 * and displayed together. Different groups are separated by blank lines. */
+	/** Group ID: commands in the same group are connected by operators. */
 	group: number;
+	/** The parent group when this command was found inside a shell expansion. */
+	parentGroup?: number;
 	/** The operator connecting this command to the next ("|", "&&", "||", or ";").
 	 * Undefined for the last command in a group. */
 	joiner?: "|" | "&&" | "||" | ";";
