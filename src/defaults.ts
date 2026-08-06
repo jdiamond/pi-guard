@@ -39,6 +39,8 @@ export const DEFAULT_CONFIG = {
 			"git branch --show-current": "allow",
 			"git diff": "allow",
 			"git log": "allow",
+			"git merge-base": "allow",
+			"git rev-parse": "allow",
 			"git show": "allow",
 			"git status": "allow",
 			grep: "allow",

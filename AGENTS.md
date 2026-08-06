@@ -1,6 +1,8 @@
 pi-guard is a pi extension that adds permission gating for tools. It intercepts `tool_call` events and prompts the user before executing commands or file operations based on configurable rules.
 
-**Default behavior:** see `src/defaults.ts`
+**Bash commands:** Bash input is parsed with the `unbash` AST parser. Commands in pipelines, shell substitutions, wrappers, and other nested constructs are extracted and evaluated independently; do not assess safety from raw shell text alone.
+
+**Default behavior:** inspect `src/defaults.ts` before assessing or changing built-in allowed commands. It is the source of truth for default rules.
 
 **Rule precedence (last match wins):** default → user config → project config → PI_GUARD env var → session rules
 
