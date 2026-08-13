@@ -211,7 +211,11 @@ function extractPassthrough(
 	const args = getCommandArgs(cmd);
 	const i = scanPassthroughBoundary(args, flagArgs, skipVarAssignments);
 	if (i >= args.length) return [];
-	return parseSubCommandString(args.slice(i).join(" "), ctx);
+	return parseSubCommandString(
+		shellQuoteArguments(args.slice(i)),
+		ctx,
+		cmd.group,
+	);
 }
 
 /**
@@ -234,7 +238,7 @@ function extractFlag(
 
 		if (arg === targetFlag) {
 			const scriptArg = args[i + 1];
-			return scriptArg ? parseSubCommandString(scriptArg, ctx) : [];
+			return scriptArg ? parseSubCommandString(scriptArg, ctx, cmd.group) : [];
 		}
 
 		if (arg?.startsWith("-")) {
@@ -291,7 +295,9 @@ function extractExec(
 			const { parts, nextIdx } = collectExecCommand(args, i + 1, terminators);
 			i = nextIdx;
 			if (parts.length > 0) {
-				results.push(...parseSubCommandString(parts.join(" "), ctx));
+				results.push(
+					...parseSubCommandString(shellQuoteArguments(parts), ctx, cmd.group),
+				);
 			}
 			continue;
 		}
@@ -301,14 +307,29 @@ function extractExec(
 	return results;
 }
 
+/** Quote parsed argument values so re-parsing retains their original boundaries. */
+function shellQuoteArguments(args: string[]): string {
+	return args.map((arg) => `'${arg.replaceAll("'", "'\\\"'\\\"'")}'`).join(" ");
+}
+
 /**
  * Parse a command string and extract all top-level commands from it.
  * Uses the provided context for group ID allocation, or creates a fresh one.
  */
-function parseSubCommandString(str: string, ctx?: ExtractCtx): CommandRef[] {
+function parseSubCommandString(
+	str: string,
+	ctx?: ExtractCtx,
+	parentGroup?: number,
+): CommandRef[] {
 	try {
 		const ast = parseBash(str);
-		return extractAllCommandsFromAST(ast, str, ctx ?? createExtractCtx());
+		const commands = extractAllCommandsFromAST(
+			ast,
+			str,
+			ctx ?? createExtractCtx(),
+		);
+		if (parentGroup === undefined) return commands;
+		return commands.map((command) => ({ ...command, parentGroup }));
 	} catch {
 		// If we can't parse the sub-command string, we can't check it.
 		// Return empty — the caller will still check the wrapper command

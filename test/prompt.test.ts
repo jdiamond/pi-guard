@@ -9,6 +9,7 @@ import {
 	buildFileApprovalPromptData,
 } from "../src/prompt.ts";
 import { getCommandArgs, getCommandName } from "../src/resolve.ts";
+import { expandWrapperCommands } from "../src/wrappers.ts";
 
 function extract(raw: string) {
 	return extractAllCommandsFromAST(parseBash(raw), raw);
@@ -154,6 +155,29 @@ test("buildApprovalPromptData", async (t) => {
 			{ text: "echo $(...)", allowed: false },
 			{ text: "cat foo", allowed: false, indent: 1, joiner: "|" },
 			{ text: "grep bar", allowed: false, indent: 1 },
+		]);
+	});
+
+	await t.test("indents commands executed by nested wrappers", () => {
+		const raw =
+			"kubectl get pods -o name | xargs -n1 sh -c 'echo pod; kubectl logs pod | grep error'";
+		const { commands, expandedWrappers } = expandWrapperCommands(extract(raw));
+		const unauthorized = commands.filter((cmd) => getCommandName(cmd) === "sh");
+
+		const data = buildApprovalPromptData(
+			commands,
+			unauthorized,
+			undefined,
+			expandedWrappers,
+		);
+
+		assert.deepEqual(data.commands, [
+			{ text: "kubectl get pods -o name", allowed: true, joiner: "|" },
+			{ text: "xargs -n1 ...", allowed: true },
+			{ text: "sh -c ...", allowed: false, indent: 1 },
+			{ text: "echo pod", allowed: true, indent: 2, joiner: ";" },
+			{ text: "kubectl logs pod", allowed: true, indent: 2, joiner: "|" },
+			{ text: "grep error", allowed: true, indent: 2 },
 		]);
 	});
 
