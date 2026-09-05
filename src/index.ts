@@ -208,6 +208,22 @@ export default function (pi: ExtensionAPI) {
 		sessionRules: {},
 	};
 
+	function updateStatus(ctx: ExtensionContext) {
+		if (!ctx.hasUI) return;
+		const text = context.config.enabled
+			? `guard: ${context.activeProfile ?? "on"}`
+			: "guard: off";
+		ctx.ui.setStatus("pi-guard", text);
+	}
+
+	pi.on("session_start", async (_event, ctx) => {
+		updateStatus(ctx);
+	});
+
+	pi.on("session_shutdown", async (_event, ctx) => {
+		if (ctx.hasUI) ctx.ui.setStatus("pi-guard", undefined);
+	});
+
 	// Register shortcut commands
 	const shortcuts = context.config.shortcuts ?? {};
 	for (const [shortcut, subcommand] of Object.entries(shortcuts)) {
@@ -222,6 +238,7 @@ export default function (pi: ExtensionAPI) {
 					context,
 					ctx.cwd,
 				);
+				updateStatus(ctx);
 				ctx.ui.notify(result.message, result.type);
 			},
 		});
@@ -233,6 +250,7 @@ export default function (pi: ExtensionAPI) {
 		handler: async (args, ctx) => {
 			const { action, target } = parseGuardArgs(args);
 			const result = await handleGuardCommand(action, target, context, ctx.cwd);
+			updateStatus(ctx);
 			ctx.ui.notify(result.message, result.type);
 		},
 	});
