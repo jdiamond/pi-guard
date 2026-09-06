@@ -213,7 +213,12 @@ export default function (pi: ExtensionAPI) {
 		const text = context.config.enabled
 			? `guard: ${context.activeProfile ?? "on"}`
 			: "guard: off";
-		ctx.ui.setStatus("pi-guard", text);
+		const color = !context.config.enabled
+			? "error"
+			: context.activeProfile
+				? "accent"
+				: "warning";
+		ctx.ui.setStatus("pi-guard", ctx.ui.theme.fg(color, text));
 	}
 
 	pi.on("session_start", async (_event, ctx) => {
