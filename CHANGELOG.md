@@ -27,6 +27,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **`find -execdir` and `-okdir` wrapper expansion** — Nested commands in
+  these `find` forms are now extracted and checked independently against the
+  configured rules (#8).
 - **Rejected tool calls now terminate the current model turn** — Rejecting a
   tool call in the approval dialog no longer triggers an automatic follow-up
   model call. This requires pi 0.84.1 or newer; the package now targets pi
