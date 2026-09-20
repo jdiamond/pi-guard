@@ -34,6 +34,14 @@ async function withBlockedUi<T>(
 	}
 }
 
+function blockedByUserRejection() {
+	return {
+		block: true as const,
+		reason: "[Blocked by pi-guard: User rejected this invocation]",
+		terminate: true as const,
+	};
+}
+
 async function showApprovalDialog(
 	ctx: ExtensionContext,
 	promptData: ApprovalPromptData,
@@ -130,10 +138,7 @@ async function handleBashParseFailure(
 	);
 
 	if (!confirmed) {
-		return {
-			block: true,
-			reason: `[Blocked by pi-guard: User rejected this invocation]`,
-		};
+		return blockedByUserRejection();
 	}
 
 	// Returning undefined means the user allowed the command and it should run.
@@ -261,10 +266,7 @@ async function runApprovalLoop(
 		}
 
 		if (choice !== "Allow") {
-			return {
-				block: true,
-				reason: `[Blocked by pi-guard: User rejected this invocation]`,
-			};
+			return blockedByUserRejection();
 		}
 
 		return;
@@ -374,10 +376,7 @@ async function handleToolApproval(
 		return;
 	}
 	if (choice !== "Allow") {
-		return {
-			block: true,
-			reason: "[Blocked by pi-guard: User rejected this invocation]",
-		};
+		return blockedByUserRejection();
 	}
 }
 

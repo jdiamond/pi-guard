@@ -27,6 +27,10 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Rejected tool calls now terminate the current model turn** — Rejecting a
+  tool call in the approval dialog no longer triggers an automatic follow-up
+  model call. This requires pi 0.84.1 or newer; the package now targets pi
+  0.86.1 (#13).
 - **Path traversal bypass in glob rule matching** — Rules for file tools (read,
   edit, write) were matched against the raw input path, so paths with `..`
   segments (e.g., `../html/.ddev/.env`) and symlinks could route around deny
