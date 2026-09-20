@@ -1,4 +1,7 @@
 import assert from "node:assert/strict";
+import * as fs from "node:fs";
+import * as os from "node:os";
+import * as path from "node:path";
 import { test } from "node:test";
 import { parse as parseBash } from "unbash";
 import { extractAllCommandsFromAST } from "../src/extract.ts";
@@ -425,6 +428,53 @@ test("resolveGlobAction", async (t) => {
 					{ ".secrets/config": "deny" },
 					"/workspace/project",
 				),
+				"deny",
+			);
+		},
+	);
+
+	await t.test("matches a protected file through a symlink", (t) => {
+		const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-guard-"));
+		t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+		fs.mkdirSync(path.join(dir, "real"));
+		fs.writeFileSync(path.join(dir, "real", "credentials"), "secret");
+		try {
+			fs.symlinkSync(path.join(dir, "real"), path.join(dir, "link"));
+		} catch {
+			t.skip("symlinks not permitted in this environment");
+			return;
+		}
+
+		assert.equal(
+			resolveGlobAction(
+				"link/credentials",
+				{ "**/real/credentials": "deny" },
+				dir,
+			),
+			"deny",
+		);
+	});
+
+	await t.test(
+		"matches traversal through a symlink as the kernel resolves it",
+		(t) => {
+			const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pi-guard-"));
+			t.after(() => fs.rmSync(dir, { recursive: true, force: true }));
+			fs.mkdirSync(path.join(dir, "deep", "nested"), { recursive: true });
+			fs.writeFileSync(path.join(dir, "deep", "escape"), "secret");
+			try {
+				fs.symlinkSync(
+					path.join(dir, "deep", "nested"),
+					path.join(dir, "link"),
+				);
+			} catch {
+				t.skip("symlinks not permitted in this environment");
+				return;
+			}
+
+			// The kernel opens deep/escape for link/../escape, not ./escape.
+			assert.equal(
+				resolveGlobAction("link/../escape", { "**/deep/escape": "deny" }, dir),
 				"deny",
 			);
 		},

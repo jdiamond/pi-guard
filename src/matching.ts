@@ -1,3 +1,4 @@
+import * as fs from "node:fs";
 import * as path from "node:path";
 import { minimatch } from "minimatch";
 import type { Action } from "./types.ts";
@@ -95,6 +96,10 @@ export function resolveBashAction(
  * Rules are evaluated in insertion order; last match wins.
  * The special pattern "*" matches any path.
  *
+ * When cwd is given, each rule is matched against several forms of the
+ * input: normalized, cwd-relative, absolute, and the canonical path with
+ * symlinks resolved by the OS (when the path exists).
+ *
  * Returns undefined if no rule matches.
  */
 export function resolveGlobAction(
@@ -103,13 +108,22 @@ export function resolveGlobAction(
 	cwd?: string,
 ): Action | undefined {
 	let result: Action | undefined;
-	const inputs = cwd
-		? [
-				path.normalize(input),
-				path.normalize(path.relative(cwd, path.resolve(cwd, input)) || "."),
-				path.resolve(cwd, input),
-			]
-		: [path.normalize(input)];
+	const inputs = [path.normalize(input)];
+	if (cwd) {
+		const absolute = path.resolve(cwd, input);
+		inputs.push(path.normalize(path.relative(cwd, absolute) || "."));
+		inputs.push(absolute);
+		try {
+			// Apply the OS resolver to the un-normalized join so ".." after a
+			// symlink resolves the way the kernel's open() does. The native
+			// resolver is required: the default JS implementation collapses
+			// ".." lexically and can disagree with the kernel.
+			const joined = path.isAbsolute(input) ? input : cwd + path.sep + input;
+			inputs.push(fs.realpathSync.native(joined));
+		} catch {
+			// Path does not exist yet (e.g. a write target); lexical candidates stand.
+		}
+	}
 
 	for (const [pattern, action] of Object.entries(rules)) {
 		if (pattern === "*") {
