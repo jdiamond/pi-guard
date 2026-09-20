@@ -1,3 +1,4 @@
+import * as path from "node:path";
 import { minimatch } from "minimatch";
 import type { Action } from "./types.ts";
 
@@ -99,8 +100,16 @@ export function resolveBashAction(
 export function resolveGlobAction(
 	input: string,
 	rules: Record<string, Action>,
+	cwd?: string,
 ): Action | undefined {
 	let result: Action | undefined;
+	const inputs = cwd
+		? [
+				path.normalize(input),
+				path.normalize(path.relative(cwd, path.resolve(cwd, input)) || "."),
+				path.resolve(cwd, input),
+			]
+		: [path.normalize(input)];
 
 	for (const [pattern, action] of Object.entries(rules)) {
 		if (pattern === "*") {
@@ -108,7 +117,7 @@ export function resolveGlobAction(
 			continue;
 		}
 
-		if (globMatch(pattern, input)) {
+		if (inputs.some((candidate) => globMatch(pattern, candidate))) {
 			result = action;
 		}
 	}

@@ -397,6 +397,39 @@ test("resolveGlobAction", async (t) => {
 		assert.equal(resolveGlobAction(".env", { ".env": "deny" }), "deny");
 	});
 
+	await t.test("matches a protected file through dot-segment traversal", () => {
+		assert.equal(
+			resolveGlobAction("./config/../.env", { "**/.env": "deny" }),
+			"deny",
+		);
+	});
+
+	await t.test(
+		"matches a protected nested file through parent traversal",
+		() => {
+			assert.equal(
+				resolveGlobAction("secrets/archive/../credentials.json", {
+					"secrets/credentials.json": "deny",
+				}),
+				"deny",
+			);
+		},
+	);
+
+	await t.test(
+		"matches traversal back to the current working directory",
+		() => {
+			assert.equal(
+				resolveGlobAction(
+					"../project/.secrets/config",
+					{ ".secrets/config": "deny" },
+					"/workspace/project",
+				),
+				"deny",
+			);
+		},
+	);
+
 	await t.test("deny overrides allow", () => {
 		const rules = { "*": "allow" as const, "*.pem": "deny" as const };
 		assert.equal(resolveGlobAction("config.ts", rules), "allow");

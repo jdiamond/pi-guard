@@ -392,7 +392,7 @@ export async function handleGlobTool(
 	return handleToolApproval(
 		pi,
 		tool,
-		resolveGlobAction(path, toolRules),
+		resolveGlobAction(path, toolRules, ctx.cwd),
 		ctx,
 		sessionRules,
 		buildFileApprovalPromptData(tool, path),
