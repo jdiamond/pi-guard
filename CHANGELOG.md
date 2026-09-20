@@ -25,6 +25,16 @@ All notable changes to this project will be documented in this file.
   unauthorized command patterns — trim, wildcard, or delete lines before
   confirming. Cancel returns to the approval select.
 
+### Fixed
+
+- **Path traversal bypass in glob rule matching** — Rules for file tools (read,
+  edit, write) were matched against the raw input path, so paths with `..`
+  segments (e.g., `../html/.ddev/.env`) and symlinks could route around deny
+  rules such as `**/.env: deny` without any prompt. Paths are now matched
+  against multiple forms — normalized, cwd-relative, absolute, and canonical
+  with symlinks resolved via `fs.realpathSync.native` — so rules apply to the
+  file actually being accessed (#11). Thanks @mxr576 for the report.
+
 ## [1.4.0] - 2026-07-11
 
 ### Added
