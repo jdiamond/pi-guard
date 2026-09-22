@@ -19,7 +19,7 @@ import type { CommandRef } from "./types.ts";
  *
  * - "exec": The sub-command appears after one of `keywords` and runs until
  *   end-of-args (if `terminators` is null) or until a terminator token.
- *   Example: find . -exec rm {} \;  (keywords: ["-exec", "-ok"], terminators: [";", "+"])
+ *   Example: find . -exec rm {} \;  (keywords: ["-exec", "-ok", "-execdir", "-okdir"], terminators: [";", "+"])
  *   Example: fd . -e ts -x rm {}    (keywords: ["-x", "--exec", "-X", "--exec-batch"], terminators: null)
  */
 export type WrapperSpec =
@@ -77,7 +77,7 @@ export const WRAPPER_COMMANDS: Record<string, WrapperSpec> = {
 	zsh: { type: "flag", flag: "-c" },
 	find: {
 		type: "exec",
-		keywords: ["-exec", "-ok"],
+		keywords: ["-exec", "-ok", "-execdir", "-okdir"],
 		terminators: [";", "+"],
 	},
 	fd: {

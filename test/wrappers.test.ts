@@ -158,6 +158,32 @@ test("expandWrapperCommands", async (t) => {
 		]);
 	});
 
+	await t.test("find -execdir and -okdir — extract sub-commands", () => {
+		for (const keyword of ["-execdir", "-okdir"]) {
+			assert.deepEqual(
+				expand(`find . ${keyword} rm {} \\;`),
+				[
+					{ name: "find", args: [".", keyword, "rm", "{}", ";"] },
+					{ name: "rm", args: ["{}"] },
+				],
+				keyword,
+			);
+		}
+	});
+
+	await t.test("find -execdir and -okdir — support + terminator", () => {
+		for (const keyword of ["-execdir", "-okdir"]) {
+			assert.deepEqual(
+				expand(`find . ${keyword} rm {} +`),
+				[
+					{ name: "find", args: [".", keyword, "rm", "{}", "+"] },
+					{ name: "rm", args: ["{}"] },
+				],
+				keyword,
+			);
+		}
+	});
+
 	await t.test("find -exec with sub-command flags", () => {
 		const result = expand("find . -exec rm -rf {} \\;");
 		assert.deepEqual(result, [
@@ -552,6 +578,17 @@ test("wrapper expansion + rule resolution", async (t) => {
 		const rules = { "*": "ask", find: "allow" } as const;
 		const unauthorized = resolveUnauthorized("find . -exec rm {} \\;", rules);
 		assert.deepEqual(unauthorized, ["rm"]);
+	});
+
+	await t.test("find -execdir/-okdir — nested commands are checked", () => {
+		const rules = { "*": "ask", find: "allow" } as const;
+		for (const keyword of ["-execdir", "-okdir"]) {
+			const unauthorized = resolveUnauthorized(
+				`find . ${keyword} rm {} \\;`,
+				rules,
+			);
+			assert.deepEqual(unauthorized, ["rm"], keyword);
+		}
 	});
 
 	await t.test("fd -x rm {} — fd allowed, rm is not", () => {
