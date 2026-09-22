@@ -65,7 +65,15 @@ async function handleToolCall(
 	if (typeof toolRules !== "object") {
 		action = toolRules ?? "ask";
 	} else {
-		return handleMatchedTool(pi, tool, input, toolRules, ctx, context);
+		return handleMatchedTool(
+			pi,
+			tool,
+			input,
+			toolRules,
+			effectiveRules,
+			ctx,
+			context,
+		);
 	}
 
 	const onSave = () => saveToolRule(tool, context);
@@ -85,6 +93,7 @@ async function handleMatchedTool(
 	tool: string,
 	input: ToolCallInput,
 	toolRules: Record<string, Action>,
+	effectiveRules: Rules,
 	ctx: ExtensionContext,
 	context: GuardContext,
 ): Promise<{ block: true; reason: string } | undefined> {
@@ -108,16 +117,26 @@ async function handleMatchedTool(
 	if (typeof value !== "string" || value.trim() === "") return;
 
 	switch (matcher.type) {
-		case "bash":
+		case "bash": {
+			const writeRules =
+				effectiveRules && typeof effectiveRules === "object"
+					? effectiveRules.write
+					: undefined;
+			const resolvedWriteRules =
+				typeof writeRules === "object"
+					? writeRules
+					: { "*": writeRules ?? "ask" };
 			return handleBashTool(
 				pi,
 				tool,
 				value,
 				toolRules,
+				resolvedWriteRules,
 				ctx,
 				context.sessionRules,
 				(patterns) => saveBashRules(tool, patterns, context),
 			);
+		}
 		case "glob":
 			return handleGlobTool(
 				pi,

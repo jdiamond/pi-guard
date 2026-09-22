@@ -88,6 +88,7 @@ export async function handleBashTool(
 	tool: string,
 	rawCmd: string,
 	toolRules: Record<string, Action>,
+	writeRules: Record<string, Action>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
@@ -105,16 +106,32 @@ export async function handleBashTool(
 	if (allCommands.length === 0) return;
 
 	const unauthorizedCommands = findUnauthorizedCommands(allCommands, toolRules);
-	if (unauthorizedCommands.length === 0) return;
+	const unauthorizedRedirects = findUnauthorizedRedirects(
+		allCommands,
+		writeRules,
+		ctx.cwd,
+	);
+	const unauthorized = Array.from(
+		new Set([...unauthorizedCommands, ...unauthorizedRedirects]),
+	);
+	if (unauthorized.length === 0) return;
 
-	if (!ctx.hasUI)
-		return handleNonInteractiveBash(unauthorizedCommands, toolRules);
+	for (const cmd of unauthorizedRedirects) {
+		if (hasDeniedRedirect(cmd, writeRules, ctx.cwd)) {
+			return {
+				block: true,
+				reason: "[Blocked by pi-guard: Security policy]",
+			};
+		}
+	}
+
+	if (!ctx.hasUI) return handleNonInteractiveBash(unauthorized, toolRules);
 
 	return handleInteractiveBash(
 		pi,
 		tool,
 		allCommands,
-		unauthorizedCommands,
+		unauthorized,
 		expandedWrappers,
 		ctx,
 		sessionRules,
@@ -142,6 +159,59 @@ async function handleBashParseFailure(
 	}
 
 	// Returning undefined means the user allowed the command and it should run.
+}
+
+export function findUnauthorizedRedirects(
+	allCommands: CommandRef[],
+	writeRules: Record<string, Action>,
+	cwd: string,
+): CommandRef[] {
+	return allCommands.filter((cmd) =>
+		cmd.node.redirects.some(
+			(redirect) =>
+				isOutputRedirect(
+					redirect.operator,
+					redirect.target?.value ?? redirect.target?.text,
+				) &&
+				redirect.target &&
+				resolveGlobAction(
+					redirect.target.value ?? redirect.target.text,
+					writeRules,
+					cwd,
+				) !== "allow",
+		),
+	);
+}
+
+export function hasDeniedRedirect(
+	cmd: CommandRef,
+	writeRules: Record<string, Action>,
+	cwd: string,
+): boolean {
+	return cmd.node.redirects.some(
+		(redirect) =>
+			isOutputRedirect(
+				redirect.operator,
+				redirect.target?.value ?? redirect.target?.text,
+			) &&
+			redirect.target &&
+			resolveGlobAction(
+				redirect.target.value ?? redirect.target.text,
+				writeRules,
+				cwd,
+			) === "deny",
+	);
+}
+
+export function isOutputRedirect(
+	operator: string,
+	target: string | undefined,
+): boolean {
+	if ([">", ">>", ">|", "&>", "&>>"].includes(operator)) return true;
+	if (operator !== ">&") return false;
+
+	// >&N duplicates stdout to file descriptor N; >&- closes it.
+	return target !== undefined && target !== "-" && !/^\d+$/.test(target);
 }
 
 function findUnauthorizedCommands(
