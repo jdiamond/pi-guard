@@ -135,6 +135,7 @@ async function handleMatchedTool(
 				ctx,
 				context.sessionRules,
 				(patterns) => saveBashRules(tool, patterns, context),
+				(patterns) => saveWriteRules(patterns, context),
 			);
 		}
 		case "glob":
@@ -186,6 +187,22 @@ async function saveBashRules(
 	}
 
 	rules[tool] = toolRules;
+	context.config.rules = rules;
+	await saveConfig(context.config);
+}
+
+async function saveWriteRules(patterns: string[], context: GuardContext) {
+	const current = context.config.rules;
+	const rules: Record<string, ToolRules> =
+		typeof current === "string" ? {} : { ...current };
+	const writeRules: Record<string, Action> =
+		rules.write && typeof rules.write === "object"
+			? { ...(rules.write as Record<string, Action>) }
+			: { "*": "ask" };
+
+	for (const pattern of patterns) writeRules[pattern] = "allow";
+
+	rules.write = writeRules;
 	context.config.rules = rules;
 	await saveConfig(context.config);
 }

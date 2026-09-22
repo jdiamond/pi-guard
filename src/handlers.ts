@@ -13,6 +13,7 @@ import {
 import {
 	type ApprovalPromptData,
 	buildApprovalPromptData,
+	buildBashApprovalChoices,
 	buildCustomApprovalPromptData,
 	buildFileApprovalPromptData,
 } from "./prompt.ts";
@@ -92,6 +93,7 @@ export async function handleBashTool(
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+	onSaveWriteRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	let ast: Script | undefined;
 	try {
@@ -131,11 +133,15 @@ export async function handleBashTool(
 		pi,
 		tool,
 		allCommands,
-		unauthorized,
+		unauthorizedCommands,
+		unauthorizedRedirects,
+		toolRules,
+		writeRules,
 		expandedWrappers,
 		ctx,
 		sessionRules,
 		onSaveBashRules,
+		onSaveWriteRules,
 	);
 }
 
@@ -214,6 +220,25 @@ export function isOutputRedirect(
 	return target !== undefined && target !== "-" && !/^\d+$/.test(target);
 }
 
+function getOutputRedirectTargets(commands: CommandRef[]): string[] {
+	return Array.from(
+		new Set(
+			commands.flatMap((cmd) =>
+				cmd.node.redirects.flatMap((redirect) => {
+					const target = redirect.target?.value ?? redirect.target?.text;
+					return isOutputRedirect(redirect.operator, target) && target
+						? [target]
+						: [];
+				}),
+			),
+		),
+	);
+}
+
+function applyAllowRules(rules: Record<string, Action>, patterns: string[]) {
+	for (const pattern of patterns) rules[pattern] = "allow";
+}
+
 function findUnauthorizedCommands(
 	allCommands: CommandRef[],
 	toolRules: Record<string, Action>,
@@ -254,129 +279,172 @@ async function handleInteractiveBash(
 	tool: string,
 	allCommands: CommandRef[],
 	unauthorizedCommands: CommandRef[],
+	unauthorizedRedirects: CommandRef[],
+	toolRules: Record<string, Action>,
+	writeRules: Record<string, Action>,
 	expandedWrappers: Set<CommandRef>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+	onSaveWriteRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
-	const uniqueBaseNames = Array.from(
-		new Set(unauthorizedCommands.map(getCommandName)),
-	);
-	const temporaryAllowLabel = `Temporarily allow ${uniqueBaseNames.join(", ")} (this session only)`;
-	const permanentAllowLabel = `Permanently allow ${uniqueBaseNames.join(", ")} (save to settings.json)`;
-
-	const promptData = buildApprovalPromptData(
-		allCommands,
-		unauthorizedCommands,
-		undefined,
-		expandedWrappers,
-	);
-
 	return withBlockedUi(pi, "Command approval", () =>
 		runApprovalLoop(
-			promptData,
+			allCommands,
 			tool,
-			temporaryAllowLabel,
-			permanentAllowLabel,
 			unauthorizedCommands,
+			unauthorizedRedirects,
+			toolRules,
+			writeRules,
+			expandedWrappers,
 			ctx,
 			sessionRules,
 			onSaveBashRules,
+			onSaveWriteRules,
 		),
 	);
 }
 
 /**
- * Present the approval prompt and handle the user's choice.
- *
- * The loop only continues when the user chooses "Always allow" but then
- * cancels the pattern editor. In that case we return to the prompt so they
- * can reject instead. There is no iteration cap because the user is in full
- * control and can break out by selecting "Reject" or "Allow".
+ * Keep asking until all command and redirect permissions are resolved, or the
+ * user explicitly allows this invocation once.
  */
 async function runApprovalLoop(
-	promptData: ApprovalPromptData,
+	allCommands: CommandRef[],
 	tool: string,
-	temporaryAllowLabel: string,
-	permanentAllowLabel: string,
 	unauthorizedCommands: CommandRef[],
+	unauthorizedRedirects: CommandRef[],
+	toolRules: Record<string, Action>,
+	writeRules: Record<string, Action>,
+	expandedWrappers: Set<CommandRef>,
 	ctx: ExtensionContext,
 	sessionRules: Record<string, Record<string, Action>>,
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+	onSaveWriteRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
 	while (true) {
-		const choice = await showApprovalDialog(ctx, promptData, [
-			"Allow",
-			temporaryAllowLabel,
-			permanentAllowLabel,
-			"Reject",
-		]);
+		unauthorizedCommands = findUnauthorizedCommands(allCommands, toolRules);
+		unauthorizedRedirects = findUnauthorizedRedirects(
+			allCommands,
+			writeRules,
+			ctx.cwd,
+		);
+		if (
+			unauthorizedCommands.length === 0 &&
+			unauthorizedRedirects.length === 0
+		) {
+			return;
+		}
+		const unauthorized = Array.from(
+			new Set([...unauthorizedCommands, ...unauthorizedRedirects]),
+		);
+		const commandNames = Array.from(
+			new Set(unauthorizedCommands.map(getCommandName)),
+		);
+		const writeTargets = getOutputRedirectTargets(unauthorizedRedirects);
+		const choices = buildBashApprovalChoices(commandNames, writeTargets);
+		const commandLabels = commandNames.length > 0 ? choices.slice(1, 3) : [];
+		const writeStart = 1 + commandLabels.length;
+		const writeLabels = writeTargets.length
+			? choices.slice(writeStart, writeStart + 2)
+			: [];
+		const promptData = buildApprovalPromptData(
+			allCommands,
+			unauthorized,
+			undefined,
+			expandedWrappers,
+		);
+		const choice = await showApprovalDialog(ctx, promptData, choices);
 
-		if (choice === temporaryAllowLabel) {
-			if (
-				await handleSessionPatterns(
-					unauthorizedCommands,
-					ctx,
-					tool,
-					sessionRules,
-				)
-			) {
-				return;
-			}
+		if (
+			await handleCommandChoice(
+				choice,
+				commandLabels,
+				unauthorizedCommands,
+				ctx,
+				tool,
+				toolRules,
+				sessionRules,
+				onSaveBashRules,
+			)
+		) {
 			continue;
 		}
-
-		if (choice === permanentAllowLabel) {
-			if (
-				await handleSavePatterns(unauthorizedCommands, ctx, onSaveBashRules)
-			) {
-				return;
-			}
+		if (
+			await handleWriteChoice(
+				choice,
+				writeLabels,
+				writeTargets,
+				ctx,
+				writeRules,
+				sessionRules,
+				onSaveWriteRules,
+			)
+		) {
 			continue;
 		}
-
-		if (choice !== "Allow") {
-			return blockedByUserRejection();
-		}
-
+		if (choice !== "Allow") return blockedByUserRejection();
 		return;
 	}
 }
 
-async function handleSessionPatterns(
-	unauthorizedCommands: CommandRef[],
+async function handleCommandChoice(
+	choice: string | undefined,
+	labels: string[],
+	commands: CommandRef[],
 	ctx: ExtensionContext,
 	tool: string,
+	toolRules: Record<string, Action>,
 	sessionRules: Record<string, Record<string, Action>>,
+	onSave?: (patterns: string[]) => Promise<void>,
 ): Promise<boolean> {
+	if (labels.length === 0 || (choice !== labels[0] && choice !== labels[1])) {
+		return false;
+	}
 	const patterns = await openCommandEditor(
-		unauthorizedCommands,
+		commands,
 		ctx,
-		"Edit commands to allow for this session (one per line)",
+		choice === labels[0]
+			? "Edit commands to allow for this session (one per line)"
+			: "Edit commands to always allow (one per line)",
 	);
-	if (patterns === undefined) return false;
-
-	sessionRules[tool] = sessionRules[tool] ?? {};
-	for (const pattern of patterns) {
-		sessionRules[tool][pattern] = "allow";
+	if (patterns === undefined) return true;
+	applyAllowRules(toolRules, patterns);
+	if (choice === labels[0]) {
+		sessionRules[tool] = sessionRules[tool] ?? {};
+		applyAllowRules(sessionRules[tool], patterns);
+	} else if (onSave) {
+		await onSave(patterns);
 	}
 	return true;
 }
 
-async function handleSavePatterns(
-	unauthorizedCommands: CommandRef[],
+async function handleWriteChoice(
+	choice: string | undefined,
+	labels: string[],
+	targets: string[],
 	ctx: ExtensionContext,
-	onSaveBashRules?: (patterns: string[]) => Promise<void>,
+	writeRules: Record<string, Action>,
+	sessionRules: Record<string, Record<string, Action>>,
+	onSave?: (patterns: string[]) => Promise<void>,
 ): Promise<boolean> {
-	const patterns = await openCommandEditor(
-		unauthorizedCommands,
+	if (labels.length === 0 || (choice !== labels[0] && choice !== labels[1])) {
+		return false;
+	}
+	const patterns = await openWriteEditor(
+		targets,
 		ctx,
-		"Edit commands to always allow (one per line)",
+		choice === labels[0]
+			? "Edit writes to allow for this session (one per line)"
+			: "Edit writes to always allow (one per line)",
 	);
-	if (patterns === undefined) return false;
-
-	if (patterns.length > 0 && onSaveBashRules) {
-		await onSaveBashRules(patterns);
+	if (patterns === undefined) return true;
+	applyAllowRules(writeRules, patterns);
+	if (choice === labels[0]) {
+		sessionRules.write = sessionRules.write ?? {};
+		applyAllowRules(sessionRules.write, patterns);
+	} else if (onSave) {
+		await onSave(patterns);
 	}
 	return true;
 }
@@ -400,12 +468,25 @@ async function openCommandEditor(
 
 	if (result === undefined) return undefined;
 
+	return parseEditorLines(result);
+}
+
+async function openWriteEditor(
+	targets: string[],
+	ctx: ExtensionContext,
+	title: string,
+): Promise<string[] | undefined> {
+	const result = await ctx.ui.editor(title, targets.join("\n"));
+	return result === undefined ? undefined : parseEditorLines(result);
+}
+
+function parseEditorLines(result: string): string[] {
 	return Array.from(
 		new Set(
 			result
 				.split("\n")
-				.map((l) => l.trim())
-				.filter((l) => l.length > 0),
+				.map((line) => line.trim())
+				.filter((line) => line.length > 0),
 		),
 	);
 }

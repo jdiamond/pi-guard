@@ -20,6 +20,27 @@ export interface ApprovalPromptData {
 	commands: ApprovalCommandLine[];
 }
 
+export function buildBashApprovalChoices(
+	commandNames: string[],
+	writeTargets: string[],
+): string[] {
+	const choices = ["Allow"];
+	if (commandNames.length > 0) {
+		choices.push(
+			`Temporarily allow ${commandNames.join(", ")} (this session only)`,
+			`Permanently allow ${commandNames.join(", ")} (save to settings.json)`,
+		);
+	}
+	if (writeTargets.length > 0) {
+		choices.push(
+			"Temporarily allow these writes (this session only)",
+			"Permanently allow these writes (save to settings.json)",
+		);
+	}
+	choices.push("Reject");
+	return choices;
+}
+
 export function buildApprovalPromptData(
 	allCommands: CommandRef[],
 	unauthorizedCommands: CommandRef[],

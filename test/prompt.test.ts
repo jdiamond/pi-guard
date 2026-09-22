@@ -5,6 +5,7 @@ import { extractAllCommandsFromAST } from "../src/extract.ts";
 import { resolveBashAction } from "../src/matching.ts";
 import {
 	buildApprovalPromptData,
+	buildBashApprovalChoices,
 	buildCustomApprovalPromptData,
 	buildFileApprovalPromptData,
 } from "../src/prompt.ts";
@@ -14,6 +15,37 @@ import { expandWrapperCommands } from "../src/wrappers.ts";
 function extract(raw: string) {
 	return extractAllCommandsFromAST(parseBash(raw), raw);
 }
+
+test("buildBashApprovalChoices", async (t) => {
+	await t.test(
+		"shows command and write options when both need approval",
+		() => {
+			assert.deepEqual(buildBashApprovalChoices(["touch"], ["output.txt"]), [
+				"Allow",
+				"Temporarily allow touch (this session only)",
+				"Permanently allow touch (save to settings.json)",
+				"Temporarily allow these writes (this session only)",
+				"Permanently allow these writes (save to settings.json)",
+				"Reject",
+			]);
+		},
+	);
+
+	await t.test("omits resolved capability options", () => {
+		assert.deepEqual(buildBashApprovalChoices([], ["output.txt"]), [
+			"Allow",
+			"Temporarily allow these writes (this session only)",
+			"Permanently allow these writes (save to settings.json)",
+			"Reject",
+		]);
+		assert.deepEqual(buildBashApprovalChoices(["touch"], []), [
+			"Allow",
+			"Temporarily allow touch (this session only)",
+			"Permanently allow touch (save to settings.json)",
+			"Reject",
+		]);
+	});
+});
 
 test("buildApprovalPromptData", async (t) => {
 	await t.test(
