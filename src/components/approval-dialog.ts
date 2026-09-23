@@ -99,7 +99,7 @@ export class ApprovalDialog {
 			this.container.addChild(
 				new Text(
 					this.theme.fg(
-						command.allowed ? "success" : "warning",
+						command.allowed && !command.highlighted ? "success" : "warning",
 						this.truncate(formatCommandLine(command), width),
 					),
 					HORIZONTAL_PADDING,
@@ -148,7 +148,7 @@ export class ApprovalDialog {
 
 function formatCommandLine(command: ApprovalCommandLine): string {
 	const indent = "  ".repeat(command.indent ?? 0);
-	const prefix = command.allowed ? "✔ " : "✖ ";
+	const prefix = command.highlighted ? "⚠ " : command.allowed ? "✔ " : "✖ ";
 	const joiner = command.joiner ? ` ${command.joiner}` : "";
 	return `${indent}${prefix}${command.text}${joiner}`;
 }
