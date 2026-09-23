@@ -204,7 +204,12 @@ test("buildApprovalPromptData", async (t) => {
 		);
 
 		assert.deepEqual(data.commands, [
-			{ text: "kubectl get pods -o name", allowed: true, joiner: "|" },
+			{
+				text: "kubectl get pods -o name",
+				allowed: true,
+				highlighted: true,
+				joiner: "|",
+			},
 			{ text: "xargs -n1 ...", allowed: true },
 			{ text: "sh -c ...", allowed: false, indent: 1 },
 			{ text: "echo pod", allowed: true, indent: 2, joiner: ";" },
@@ -212,6 +217,38 @@ test("buildApprovalPromptData", async (t) => {
 			{ text: "grep error", allowed: true, indent: 2 },
 		]);
 	});
+
+	await t.test(
+		"highlights stdin source for unauthorized xargs commands",
+		() => {
+			const raw = "echo payload | xargs rm";
+			const commands = expandWrapperCommands(extract(raw));
+			const unauthorized = commands.commands.filter((cmd) => {
+				const name = getCommandName(cmd);
+				const args = getCommandArgs(cmd);
+				return (
+					resolveBashAction(name, args, {
+						echo: "allow",
+						xargs: "allow",
+						rm: "ask",
+					}) !== "allow"
+				);
+			});
+
+			const data = buildApprovalPromptData(
+				commands.commands,
+				unauthorized,
+				undefined,
+				commands.expandedWrappers,
+			);
+
+			assert.deepEqual(data.commands, [
+				{ text: "echo payload", allowed: true, highlighted: true, joiner: "|" },
+				{ text: "xargs ...", allowed: true },
+				{ text: "'rm'", allowed: false, indent: 1 },
+			]);
+		},
+	);
 
 	await t.test("shows bare assignment with joiner", () => {
 		// TOKEN=$(curl ... | jq ...) && curl ... — assignment appears with ✔

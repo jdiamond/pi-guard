@@ -31,6 +31,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Runtime input source highlighting in wrapper approvals** — When a command
+  receives input through an input-feeding wrapper such as `xargs` and requires
+  approval, the preceding pipeline command is marked with a warning icon so
+  the data flow is clear. Input-feeding wrappers opt into this behavior through
+  the wrapper registry rather than prompt-specific command names.
+- **`xargs -i` wrapper parsing** — The optional replacement string is no longer
+  mistaken for the wrapped command when `-i` is used without an argument.
 - **`find -execdir` and `-okdir` wrapper expansion** — Nested commands in
   these `find` forms are now extracted and checked independently against the
   configured rules (#8).

@@ -23,7 +23,13 @@ import type { CommandRef } from "./types.ts";
  *   Example: fd . -e ts -x rm {}    (keywords: ["-x", "--exec", "-X", "--exec-batch"], terminators: null)
  */
 export type WrapperSpec =
-	| { type: "passthrough"; flagArgs?: string[]; skipVarAssignments?: boolean }
+	| {
+			type: "passthrough";
+			flagArgs?: string[];
+			optionalFlagArgs?: string[];
+			skipVarAssignments?: boolean;
+			highlightInputSource?: boolean;
+	  }
 	| { type: "flag"; flag: string; flagArgs?: string[] }
 	| { type: "exec"; keywords: string[]; terminators: string[] | null };
 
@@ -36,19 +42,11 @@ export const WRAPPER_COMMANDS: Record<string, WrapperSpec> = {
 		type: "passthrough",
 		// Only flags that consume a separate value argument.
 		// Boolean flags (-o, -p, -r, -t, -x) are intentionally omitted.
-		flagArgs: [
-			"-a",
-			"-d",
-			"-E",
-			"-e",
-			"-I",
-			"-i",
-			"-L",
-			"-l",
-			"-n",
-			"-P",
-			"-s",
-		],
+		highlightInputSource: true,
+		flagArgs: ["-a", "-d", "-E", "-e", "-I", "-L", "-l", "-n", "-P", "-s"],
+		// -i optionally takes a replacement string; when omitted, the next
+		// argument is the command rather than the replacement string.
+		optionalFlagArgs: ["-i"],
 	},
 	sudo: {
 		type: "passthrough",
@@ -153,6 +151,7 @@ function extractSubCommands(
 			return extractPassthrough(
 				cmd,
 				spec.flagArgs,
+				spec.optionalFlagArgs,
 				spec.skipVarAssignments ?? false,
 				ctx,
 			);
@@ -176,6 +175,7 @@ function extractSubCommands(
 function scanPassthroughBoundary(
 	args: string[],
 	flagArgs?: string[],
+	optionalFlagArgs?: string[],
 	skipVarAssignments = false,
 ): number {
 	let i = 0;
@@ -190,7 +190,7 @@ function scanPassthroughBoundary(
 
 		if (!arg.startsWith("-")) break;
 
-		i += flagSpan(arg, i, args, flagArgs);
+		i += flagSpan(arg, i, args, flagArgs, optionalFlagArgs);
 	}
 	return i;
 }
@@ -205,11 +205,17 @@ function scanPassthroughBoundary(
 function extractPassthrough(
 	cmd: CommandRef,
 	flagArgs?: string[],
+	optionalFlagArgs?: string[],
 	skipVarAssignments = false,
 	ctx?: ExtractCtx,
 ): CommandRef[] {
 	const args = getCommandArgs(cmd);
-	const i = scanPassthroughBoundary(args, flagArgs, skipVarAssignments);
+	const i = scanPassthroughBoundary(
+		args,
+		flagArgs,
+		optionalFlagArgs,
+		skipVarAssignments,
+	);
 	if (i >= args.length) return [];
 	return parseSubCommandString(
 		shellQuoteArguments(args.slice(i)),
@@ -367,6 +373,7 @@ function flagSpan(
 	i: number,
 	args: string[],
 	flagArgs?: string[],
+	optionalFlagArgs?: string[],
 ): number {
 	if (arg.includes("=")) return 1;
 	// Combined short flag with value: -n1
@@ -376,6 +383,7 @@ function flagSpan(
 		takesValue(arg.slice(0, 2), flagArgs)
 	)
 		return 1;
+	if (takesValue(arg, optionalFlagArgs)) return 1;
 	if (takesValue(arg, flagArgs) && i + 1 < args.length) {
 		const next = args[i + 1];
 		if (next && !next.startsWith("-")) return 2;
@@ -410,11 +418,16 @@ export function formatWrapperDisplay(cmd: CommandRef): string {
 function formatPassthroughDisplay(
 	name: string,
 	args: string[],
-	spec: { flagArgs?: string[]; skipVarAssignments?: boolean },
+	spec: {
+		flagArgs?: string[];
+		optionalFlagArgs?: string[];
+		skipVarAssignments?: boolean;
+	},
 ): string {
 	const i = scanPassthroughBoundary(
 		args,
 		spec.flagArgs,
+		spec.optionalFlagArgs,
 		spec.skipVarAssignments,
 	);
 	return [name, ...args.slice(0, i), "..."].join(" ");

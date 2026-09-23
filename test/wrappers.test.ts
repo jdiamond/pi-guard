@@ -54,6 +54,16 @@ test("expandWrapperCommands", async (t) => {
 		]);
 	});
 
+	await t.test("xargs -i without replacement — keeps the command", () => {
+		const result = expand("printf '%s\\n' hello | xargs -i bash -c 'echo {}'");
+		assert.deepEqual(result, [
+			{ name: "printf", args: ["%s\\n", "hello"] },
+			{ name: "xargs", args: ["-i", "bash", "-c", "echo {}"] },
+			{ name: "bash", args: ["-c", "echo {}"] },
+			{ name: "echo", args: ["{}"] },
+		]);
+	});
+
 	await t.test("xargs — combined flag -n1 (no space)", () => {
 		const result = expand("find . | xargs -n1 rm");
 		assert.deepEqual(result, [
@@ -359,6 +369,24 @@ test("WRAPPER_COMMANDS registry", async (t) => {
 			);
 		}
 	});
+
+	await t.test(
+		"only input-feeding passthrough wrappers opt into source highlighting",
+		() => {
+			const xargs = WRAPPER_COMMANDS.xargs;
+			assert.ok(xargs?.type === "passthrough");
+			assert.equal(xargs.highlightInputSource, true);
+			for (const cmd of ["sudo", "nice", "nohup", "env", "strace"]) {
+				const spec = WRAPPER_COMMANDS[cmd];
+				assert.ok(spec);
+				assert.notEqual(
+					"highlightInputSource" in spec && spec.highlightInputSource,
+					true,
+					`${cmd} should not highlight an input source`,
+				);
+			}
+		},
+	);
 
 	await t.test("flag specs have correct type", () => {
 		const flagCommands = ["bash", "sh", "zsh"];

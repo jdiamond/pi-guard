@@ -1,6 +1,7 @@
 import { formatCommand, truncate } from "./format.ts";
+import { getCommandName } from "./resolve.ts";
 import type { CommandRef } from "./types.ts";
-import { formatWrapperDisplay } from "./wrappers.ts";
+import { formatWrapperDisplay, WRAPPER_COMMANDS } from "./wrappers.ts";
 
 export interface ApprovalPromptOptions {
 	maxLength?: number;
@@ -10,6 +11,7 @@ export interface ApprovalPromptOptions {
 export interface ApprovalCommandLine {
 	text: string;
 	allowed: boolean;
+	highlighted?: boolean | undefined;
 	indent?: number | undefined;
 	joiner?: string | undefined;
 }
@@ -56,6 +58,12 @@ export function buildApprovalPromptData(
 		}
 	}
 
+	const highlightedCommands = findInputSources(
+		allCommands,
+		unauthorizedCommands,
+		groupParents,
+	);
+
 	for (const command of allCommands) {
 		const allowed = !unauthorizedSet.has(command);
 		const display = expandedWrappers?.has(command)
@@ -63,12 +71,66 @@ export function buildApprovalPromptData(
 			: formatCommand(command, options);
 		const indent = groupNestingDepth(command.group, groupParents);
 		const line: ApprovalCommandLine = { text: display, allowed };
+		if (highlightedCommands.has(command)) line.highlighted = true;
 		if (indent > 0) line.indent = indent;
 		if (command.joiner) line.joiner = command.joiner;
 		commands.push(line);
 	}
 
 	return { title: "⚠️ Unapproved Commands", commands };
+}
+
+function findInputSources(
+	allCommands: CommandRef[],
+	unauthorizedCommands: CommandRef[],
+	groupParents: ReadonlyMap<number, number>,
+): Set<CommandRef> {
+	const inputSourceGroups = new Set<number>();
+	for (const command of allCommands) {
+		if (isInputSourceWrapper(command)) inputSourceGroups.add(command.group);
+	}
+
+	const highlighted = new Set<CommandRef>();
+	for (const command of unauthorizedCommands) {
+		const inputSourceGroup = findAncestorGroup(
+			command.group,
+			inputSourceGroups,
+			groupParents,
+		);
+		if (inputSourceGroup === undefined) continue;
+		const wrapperIndex = allCommands.findIndex(
+			(candidate) =>
+				candidate.group === inputSourceGroup && isInputSourceWrapper(candidate),
+		);
+		if (wrapperIndex < 1) continue;
+		const previous = allCommands[wrapperIndex - 1];
+		if (previous?.group === inputSourceGroup && previous.joiner === "|") {
+			highlighted.add(previous);
+		}
+	}
+	return highlighted;
+}
+
+function isInputSourceWrapper(command: CommandRef): boolean {
+	const spec = WRAPPER_COMMANDS[getCommandName(command)];
+	return spec?.type === "passthrough" && spec.highlightInputSource === true;
+}
+
+function findAncestorGroup(
+	group: number,
+	ancestors: ReadonlySet<number>,
+	groupParents: ReadonlyMap<number, number>,
+): number | undefined {
+	const visited = new Set<number>();
+	let current = group;
+	while (!visited.has(current)) {
+		if (ancestors.has(current)) return current;
+		visited.add(current);
+		const parent = groupParents.get(current);
+		if (parent === undefined) return undefined;
+		current = parent;
+	}
+	return undefined;
 }
 
 function groupNestingDepth(
