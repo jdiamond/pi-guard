@@ -97,6 +97,7 @@ export const DEFAULT_CONFIG = {
 		},
 		write: {
 			"*": "ask",
+			"/dev/null": "allow",
 		},
 		edit: {
 			"*": "ask",

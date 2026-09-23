@@ -24,6 +24,10 @@ All notable changes to this project will be documented in this file.
   Both session and persistent options now open an editor pre-filled with
   unauthorized command patterns — trim, wildcard, or delete lines before
   confirming. Cancel returns to the approval select.
+- **Bash output redirect permissions** — Output redirects such as `>`, `>>`,
+  `&>`, and `>& file` now use the existing `write` rules instead of bypassing
+  file permission checks. `/dev/null` is allowed by default, while command and
+  write approvals are offered as separate temporary or persistent options.
 
 ### Fixed
 

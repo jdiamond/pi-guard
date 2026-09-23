@@ -65,7 +65,15 @@ async function handleToolCall(
 	if (typeof toolRules !== "object") {
 		action = toolRules ?? "ask";
 	} else {
-		return handleMatchedTool(pi, tool, input, toolRules, ctx, context);
+		return handleMatchedTool(
+			pi,
+			tool,
+			input,
+			toolRules,
+			effectiveRules,
+			ctx,
+			context,
+		);
 	}
 
 	const onSave = () => saveToolRule(tool, context);
@@ -85,6 +93,7 @@ async function handleMatchedTool(
 	tool: string,
 	input: ToolCallInput,
 	toolRules: Record<string, Action>,
+	effectiveRules: Rules,
 	ctx: ExtensionContext,
 	context: GuardContext,
 ): Promise<{ block: true; reason: string } | undefined> {
@@ -108,16 +117,27 @@ async function handleMatchedTool(
 	if (typeof value !== "string" || value.trim() === "") return;
 
 	switch (matcher.type) {
-		case "bash":
+		case "bash": {
+			const writeRules =
+				effectiveRules && typeof effectiveRules === "object"
+					? effectiveRules.write
+					: undefined;
+			const resolvedWriteRules =
+				typeof writeRules === "object"
+					? writeRules
+					: { "*": writeRules ?? "ask" };
 			return handleBashTool(
 				pi,
 				tool,
 				value,
 				toolRules,
+				resolvedWriteRules,
 				ctx,
 				context.sessionRules,
 				(patterns) => saveBashRules(tool, patterns, context),
+				(patterns) => saveWriteRules(patterns, context),
 			);
+		}
 		case "glob":
 			return handleGlobTool(
 				pi,
@@ -167,6 +187,22 @@ async function saveBashRules(
 	}
 
 	rules[tool] = toolRules;
+	context.config.rules = rules;
+	await saveConfig(context.config);
+}
+
+async function saveWriteRules(patterns: string[], context: GuardContext) {
+	const current = context.config.rules;
+	const rules: Record<string, ToolRules> =
+		typeof current === "string" ? {} : { ...current };
+	const writeRules: Record<string, Action> =
+		rules.write && typeof rules.write === "object"
+			? { ...(rules.write as Record<string, Action>) }
+			: { "*": "ask" };
+
+	for (const pattern of patterns) writeRules[pattern] = "allow";
+
+	rules.write = writeRules;
 	context.config.rules = rules;
 	await saveConfig(context.config);
 }
