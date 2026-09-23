@@ -310,6 +310,24 @@ Activate with `/guard profile read-write`, deactivate with `/guard profile off`.
 > [!WARNING]
 > Profiles are layered between env and session rules. A profile with `"*": "allow"` will override specific rules from earlier layers (like `"rm": "deny"`) because `"*"` always matches last and wins.
 
+### Footer status
+
+pi-guard publishes its current state through Pi's standard extension status API
+under the key `pi-guard`. Both the native Footer and compatible custom footers
+such as Zentui can display it without a guard-specific integration:
+
+- `guard: on` — enabled with no profile overlay (not necessarily read-only)
+- `guard: read-write` — enabled with the named profile active
+- `guard: off` — permission checks are disabled, even if a profile is selected
+
+The status is published at session start and refreshed after `/guard` commands
+and configured shortcuts. It is cleared on session shutdown and is not published
+in non-interactive modes without UI support. This does not change permission
+rules or persist the active profile across restarts/reloads.
+
+In Zentui, use the Starship Footer and ensure `pi-guard` is not set to `off`
+in `/zentui` → **Extensions**. Extension statuses appear on the right by default.
+
 ### Shortcuts
 
 Define custom slash commands for quick access to guard actions:
