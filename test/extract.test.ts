@@ -46,6 +46,31 @@ test("extractAllCommandsFromAST", async (t) => {
 		]);
 	});
 
+	await t.test(
+		"does not extract phantom commands from quoted heredoc bodies",
+		() => {
+			const raw = `gh x --body "$(cat <<'EOF'
+batch isn't terminating pi's \`echo A\`). The \`echo B\` (end.
+EOF
+)"`;
+			assert.deepEqual(
+				summarize(raw).map(({ name }) => name),
+				["gh", "cat"],
+			);
+		},
+	);
+
+	await t.test(
+		"does not throw while extracting quoted heredocs inside command substitutions",
+		() => {
+			const raw = `gh x --body "$(cat <<'EOF'
+isn't
+EOF
+)"`;
+			assert.doesNotThrow(() => summarize(raw));
+		},
+	);
+
 	await t.test("extracts from highly nested evil subshells", () => {
 		assert.deepEqual(
 			summarize(

@@ -218,6 +218,11 @@ test("formatCommand", async (t) => {
 			},
 		);
 
+		await t.test("preserves double quotes around heredoc markers", () => {
+			const raw = `cmd <<"EOF"\n$HOME\nEOF`;
+			assert.equal(formatCommand(first(raw)), `cmd <<"EOF"↵$HOME↵EOF`);
+		});
+
 		await t.test(
 			"uses the full display budget for long heredoc content",
 			() => {

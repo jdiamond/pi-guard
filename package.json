@@ -42,7 +42,7 @@
 	},
 	"dependencies": {
 		"minimatch": "10.2.5",
-		"unbash": "4.0.2"
+		"unbash": "4.0.11"
 	},
 	"peerDependencies": {
 		"@earendil-works/pi-coding-agent": "0.86.1",
