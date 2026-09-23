@@ -131,7 +131,15 @@ function redirectPrefix(redirect: Redirect): string {
 
 function heredocTargetDisplay(redirect: Redirect, source: string): string {
 	const marker = rawHeredocMarker(redirect, source);
-	return redirect.heredocQuoted ? `'${marker}'` : marker;
+	if (!redirect.heredocQuoted) return marker;
+	const quote = heredocQuote(redirect, source);
+	return `${quote}${marker}${quote}`;
+}
+
+function heredocQuote(redirect: Redirect, source: string): "'" | '"' {
+	const target = redirect.target;
+	const raw = target ? displayWord(target, source) || target.text : "";
+	return raw.startsWith('"') ? '"' : "'";
 }
 
 function heredocMarker(redirect: Redirect, source: string): string {
@@ -141,7 +149,17 @@ function heredocMarker(redirect: Redirect, source: string): string {
 function rawHeredocMarker(redirect: Redirect, source: string): string {
 	if (!redirect.target) return "";
 	const raw = displayWord(redirect.target, source);
-	return raw.length > 0 ? raw : (redirect.target.value ?? redirect.target.text);
+	const marker =
+		raw.length > 0 ? raw : (redirect.target.value ?? redirect.target.text);
+	if (
+		redirect.heredocQuoted &&
+		marker.length >= 2 &&
+		((marker.startsWith("'") && marker.endsWith("'")) ||
+			(marker.startsWith('"') && marker.endsWith('"')))
+	) {
+		return marker.slice(1, -1);
+	}
+	return marker;
 }
 
 function displayWord(word: Word | undefined, source: string): string {

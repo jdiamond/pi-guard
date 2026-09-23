@@ -38,6 +38,10 @@ All notable changes to this project will be documented in this file.
   the wrapper registry rather than prompt-specific command names.
 - **`xargs -i` wrapper parsing** — The optional replacement string is no longer
   mistaken for the wrapped command when `-i` is used without an argument.
+- **Quoted heredoc parsing inside command substitutions** — Update unbash to
+  4.0.11 to avoid stack overflows and phantom commands when quoted heredocs
+  contain quote or backtick characters. Quoted heredoc markers in approval
+  prompts now preserve their original quote style (#14).
 - **`find -execdir` and `-okdir` wrapper expansion** — Nested commands in
   these `find` forms are now extracted and checked independently against the
   configured rules (#8).
