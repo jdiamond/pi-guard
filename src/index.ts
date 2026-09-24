@@ -238,10 +238,22 @@ export default function (pi: ExtensionAPI) {
 		console.warn(`[pi-guard] ${warnings.join("; ")}`);
 	}
 
+	const inheritedProfile =
+		process.env.PI_GUARD_PROFILE &&
+		process.env.PI_GUARD_PROFILE in (loaded.config.profiles ?? {})
+			? process.env.PI_GUARD_PROFILE
+			: undefined;
 	const context: GuardContext = {
 		config: loaded.config,
-		activeProfile: undefined,
+		activeProfile: inheritedProfile,
 		sessionRules: {},
+		setActiveProfile: (profile) => {
+			if (profile) {
+				process.env.PI_GUARD_PROFILE = profile;
+			} else {
+				delete process.env.PI_GUARD_PROFILE;
+			}
+		},
 	};
 
 	// Register shortcut commands

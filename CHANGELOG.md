@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Active profile propagation** — The active named profile is published through
+  `PI_GUARD_PROFILE` so child Pi sessions can inherit the same profile without
+  copying the full ruleset. Deactivating a profile clears the propagated value
+  for this process and its child sessions (#5).
 - **Nested command indentation in approval prompts** — Commands inside shell expansions such as `$()` and backticks now appear directly below and indented beneath their containing command, replacing the blank-line separation that disconnected them visually.
   ```
   ✔ TOKEN=$(...) &&

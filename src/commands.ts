@@ -5,6 +5,7 @@ export interface GuardContext {
 	config: GuardConfig;
 	activeProfile: string | undefined;
 	sessionRules: Record<string, Record<string, Action>>;
+	setActiveProfile?: (profile: string | undefined) => void;
 }
 
 export function parseGuardArgs(args: string): {
@@ -43,6 +44,7 @@ function handleProfileCommand(
 
 	if (target === "off") {
 		context.activeProfile = undefined;
+		context.setActiveProfile?.(undefined);
 		return { message: "Profile deactivated", type: "info" as const };
 	}
 
@@ -54,6 +56,7 @@ function handleProfileCommand(
 	}
 
 	context.activeProfile = target;
+	context.setActiveProfile?.(target);
 	return { message: `Profile activated: ${target}`, type: "info" as const };
 }
 
