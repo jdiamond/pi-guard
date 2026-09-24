@@ -2,7 +2,7 @@ import type {
 	ExtensionAPI,
 	ExtensionContext,
 } from "@earendil-works/pi-coding-agent";
-import { parse as parseBash, type Script } from "unbash";
+import { type ParsedScript, parse as parseBash } from "unbash";
 import { ApprovalDialog } from "./components/approval-dialog.ts";
 import { extractAllCommandsFromAST } from "./extract.ts";
 import {
@@ -95,9 +95,12 @@ export async function handleBashTool(
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
 	onSaveWriteRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
-	let ast: Script | undefined;
+	let ast: ParsedScript | undefined;
 	try {
 		ast = parseBash(rawCmd);
+		if (ast.errors?.length) {
+			return handleBashParseFailure(pi, ctx);
+		}
 	} catch {
 		return handleBashParseFailure(pi, ctx);
 	}

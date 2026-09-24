@@ -31,6 +31,9 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Parser diagnostics treated as parse failures** — Bash commands that produce
+  parser errors in unbash's partial AST now enter the existing safe approval
+  path instead of being evaluated as if parsing succeeded.
 - **Runtime input source highlighting in wrapper approvals** — When a command
   receives input through an input-feeding wrapper such as `xargs` and requires
   approval, the preceding pipeline command is marked with a warning icon so
