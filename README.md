@@ -193,6 +193,16 @@ Set `PI_GUARD` to inject rules from outside (e.g., by pi-spawn or CI/CD):
 PI_GUARD='{"*":"deny","bash":{"git diff":"allow"}}'
 ```
 
+When a named profile is active, pi-guard also publishes its name in
+`PI_GUARD_PROFILE` so child Pi sessions can activate the same profile:
+
+```bash
+PI_GUARD_PROFILE=strict
+```
+
+The profile name must exist in the loaded `profiles` configuration. Deactivating
+the profile clears the propagated value for this process and its child sessions.
+
 ## Matchers
 
 Matchers define how to extract and match input from a tool call. Each matcher has a `param` (which tool parameter to extract) and a `type` (how to match).
