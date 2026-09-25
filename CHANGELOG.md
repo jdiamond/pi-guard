@@ -4,6 +4,8 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.5.0] - 2026-09-23
+
 ### Added
 
 - **Active profile propagation** — The active named profile is published through
