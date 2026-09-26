@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { parse as parseBash } from "unbash";
+import { DEFAULT_CONFIG } from "../src/defaults.ts";
 import { extractAllCommandsFromAST } from "../src/extract.ts";
 import { resolveBashAction } from "../src/matching.ts";
 import { getCommandArgs, getCommandName } from "../src/resolve.ts";
@@ -111,6 +112,54 @@ test("expandWrapperCommands", async (t) => {
 			{ name: "nohup", args: ["make", "build"] },
 			{ name: "make", args: ["build"] },
 		]);
+	});
+
+	await t.test("timeout — skips duration before sub-command", () => {
+		assert.deepEqual(expand("timeout 600 python3 script.py"), [
+			{ name: "timeout", args: ["600", "python3", "script.py"] },
+			{ name: "python3", args: ["script.py"] },
+		]);
+	});
+
+	await t.test("gtimeout — skips duration before sub-command", () => {
+		assert.deepEqual(expand("gtimeout 600 python3 script.py"), [
+			{ name: "gtimeout", args: ["600", "python3", "script.py"] },
+			{ name: "python3", args: ["script.py"] },
+		]);
+	});
+
+	await t.test("timeout — skips option values and duration", () => {
+		assert.deepEqual(
+			expand("timeout --kill-after 5 --signal TERM 30 cargo check"),
+			[
+				{
+					name: "timeout",
+					args: [
+						"--kill-after",
+						"5",
+						"--signal",
+						"TERM",
+						"30",
+						"cargo",
+						"check",
+					],
+				},
+				{ name: "cargo", args: ["check"] },
+			],
+		);
+	});
+
+	await t.test("timeout — accepts equals-form options", () => {
+		assert.deepEqual(
+			expand("timeout --kill-after=5 --signal=TERM 30 cargo check"),
+			[
+				{
+					name: "timeout",
+					args: ["--kill-after=5", "--signal=TERM", "30", "cargo", "check"],
+				},
+				{ name: "cargo", args: ["check"] },
+			],
+		);
 	});
 
 	await t.test("bash -c — parses sub-command string", () => {
@@ -336,6 +385,8 @@ test("WRAPPER_COMMANDS registry", async (t) => {
 			"sudo",
 			"nice",
 			"nohup",
+			"timeout",
+			"gtimeout",
 			"env",
 			"strace",
 			"bash",
@@ -358,6 +409,8 @@ test("WRAPPER_COMMANDS registry", async (t) => {
 			"sudo",
 			"nice",
 			"nohup",
+			"timeout",
+			"gtimeout",
 			"env",
 			"strace",
 		];
@@ -433,6 +486,20 @@ function findCmd(raw: string, name: string): CommandRef {
 }
 
 test("formatWrapperDisplay", async (t) => {
+	await t.test("timeout — keeps duration and hides sub-command", () => {
+		assert.equal(
+			formatWrapperDisplay(findCmd("timeout 30 cargo check", "timeout")),
+			"timeout 30 ...",
+		);
+	});
+
+	await t.test("gtimeout — keeps duration and hides sub-command", () => {
+		assert.equal(
+			formatWrapperDisplay(findCmd("gtimeout 30 cargo check", "gtimeout")),
+			"gtimeout 30 ...",
+		);
+	});
+
 	await t.test("xargs — replaces sub-command with ...", () => {
 		assert.equal(
 			formatWrapperDisplay(
@@ -637,6 +704,19 @@ test("wrapper expansion + rule resolution", async (t) => {
 			const rules = { "*": "ask", bash: "allow" } as const;
 			const unauthorized = resolveUnauthorized("bash -c 'sudo rm'", rules);
 			assert.deepEqual(unauthorized, ["sudo", "rm"]);
+		},
+	);
+
+	await t.test(
+		"timeout wrappers are allowed by default, inner commands are checked",
+		() => {
+			for (const wrapper of ["timeout", "gtimeout"]) {
+				const unauthorized = resolveUnauthorized(
+					`${wrapper} 30 rm -rf /`,
+					DEFAULT_CONFIG.rules.bash,
+				);
+				assert.deepEqual(unauthorized, ["rm"], wrapper);
+			}
 		},
 	);
 

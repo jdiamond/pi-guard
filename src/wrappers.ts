@@ -10,8 +10,9 @@ import type { CommandRef } from "./types.ts";
  *
  * - "passthrough": The first non-flag/non-var-assignment argument (and everything
  *   after it) is a sub-command with its own arguments. Flags that consume a value
- *   are listed in `flagArgs` so we can skip past their values.
- *   Examples: xargs, sudo, nice, nohup, env, strace
+ *   are listed in `flagArgs` so we can skip past their values; `skipPositionals`
+ *   skips fixed positional arguments before the sub-command.
+ *   Examples: xargs, sudo, nice, nohup, env, strace, timeout
  *
  * - "flag": A specific flag (e.g. `-c`) takes a string argument that is parsed
  *   as a bash script. The resulting commands are extracted and checked independently.
@@ -28,6 +29,7 @@ export type WrapperSpec =
 			flagArgs?: string[];
 			optionalFlagArgs?: string[];
 			skipVarAssignments?: boolean;
+			skipPositionals?: number;
 			highlightInputSource?: boolean;
 	  }
 	| { type: "flag"; flag: string; flagArgs?: string[] }
@@ -56,6 +58,16 @@ export const WRAPPER_COMMANDS: Record<string, WrapperSpec> = {
 	},
 	nice: { type: "passthrough", flagArgs: ["-n"] },
 	nohup: { type: "passthrough" },
+	timeout: {
+		type: "passthrough",
+		flagArgs: ["-k", "--kill-after", "-s", "--signal"],
+		skipPositionals: 1,
+	},
+	gtimeout: {
+		type: "passthrough",
+		flagArgs: ["-k", "--kill-after", "-s", "--signal"],
+		skipPositionals: 1,
+	},
 	env: {
 		type: "passthrough",
 		// -v is --debug (boolean); only flags that consume a value are listed.
@@ -153,6 +165,7 @@ function extractSubCommands(
 				spec.flagArgs,
 				spec.optionalFlagArgs,
 				spec.skipVarAssignments ?? false,
+				spec.skipPositionals ?? 0,
 				ctx,
 			);
 		case "flag":
@@ -177,6 +190,7 @@ function scanPassthroughBoundary(
 	flagArgs?: string[],
 	optionalFlagArgs?: string[],
 	skipVarAssignments = false,
+	skipPositionals = 0,
 ): number {
 	let i = 0;
 	while (i < args.length) {
@@ -188,7 +202,14 @@ function scanPassthroughBoundary(
 			continue;
 		}
 
-		if (!arg.startsWith("-")) break;
+		if (!arg.startsWith("-")) {
+			if (skipPositionals > 0) {
+				skipPositionals--;
+				i++;
+				continue;
+			}
+			break;
+		}
 
 		i += flagSpan(arg, i, args, flagArgs, optionalFlagArgs);
 	}
@@ -207,6 +228,7 @@ function extractPassthrough(
 	flagArgs?: string[],
 	optionalFlagArgs?: string[],
 	skipVarAssignments = false,
+	skipPositionals = 0,
 	ctx?: ExtractCtx,
 ): CommandRef[] {
 	const args = getCommandArgs(cmd);
@@ -215,6 +237,7 @@ function extractPassthrough(
 		flagArgs,
 		optionalFlagArgs,
 		skipVarAssignments,
+		skipPositionals,
 	);
 	if (i >= args.length) return [];
 	return parseSubCommandString(
@@ -313,9 +336,14 @@ function extractExec(
 	return results;
 }
 
-/** Quote parsed argument values so re-parsing retains their original boundaries. */
+/** Quote arguments only when needed, preserving their boundaries when re-parsed. */
 function shellQuoteArguments(args: string[]): string {
-	return args.map((arg) => `'${arg.replaceAll("'", "'\\\"'\\\"'")}'`).join(" ");
+	return args.map(shellQuoteArgument).join(" ");
+}
+
+function shellQuoteArgument(arg: string): string {
+	if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
+	return `'${arg.replaceAll("'", "'\\\"'\\\"'")}'`;
 }
 
 /**
@@ -422,6 +450,7 @@ function formatPassthroughDisplay(
 		flagArgs?: string[];
 		optionalFlagArgs?: string[];
 		skipVarAssignments?: boolean;
+		skipPositionals?: number;
 	},
 ): string {
 	const i = scanPassthroughBoundary(
@@ -429,6 +458,7 @@ function formatPassthroughDisplay(
 		spec.flagArgs,
 		spec.optionalFlagArgs,
 		spec.skipVarAssignments,
+		spec.skipPositionals,
 	);
 	return [name, ...args.slice(0, i), "..."].join(" ");
 }

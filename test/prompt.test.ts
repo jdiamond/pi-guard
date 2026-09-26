@@ -245,10 +245,54 @@ test("buildApprovalPromptData", async (t) => {
 			assert.deepEqual(data.commands, [
 				{ text: "echo payload", allowed: true, highlighted: true, joiner: "|" },
 				{ text: "xargs ...", allowed: true },
-				{ text: "'rm'", allowed: false, indent: 1 },
+				{ text: "rm", allowed: false, indent: 1 },
 			]);
 		},
 	);
+
+	await t.test(
+		"does not show synthetic quotes around extracted wrapper commands",
+		async (t) => {
+			for (const [raw, wrapperText] of [
+				["xargs cargo check", "xargs ..."],
+				["timeout 30 cargo check", "timeout 30 ..."],
+			] as const) {
+				await t.test(raw, () => {
+					const expanded = expandWrapperCommands(extract(raw));
+					const unauthorized = expanded.commands.filter(
+						(cmd) => getCommandName(cmd) === "cargo",
+					);
+					const data = buildApprovalPromptData(
+						expanded.commands,
+						unauthorized,
+						undefined,
+						expanded.expandedWrappers,
+					);
+
+					assert.deepEqual(data.commands, [
+						{ text: wrapperText, allowed: true },
+						{ text: "cargo check", allowed: false, indent: 1 },
+					]);
+				});
+			}
+		},
+	);
+
+	await t.test("preserves necessary quotes in extracted arguments", () => {
+		const raw = "xargs echo 'hello world'";
+		const expanded = expandWrapperCommands(extract(raw));
+		const data = buildApprovalPromptData(
+			expanded.commands,
+			[],
+			undefined,
+			expanded.expandedWrappers,
+		);
+
+		assert.deepEqual(data.commands, [
+			{ text: "xargs ...", allowed: true },
+			{ text: "echo 'hello world'", allowed: true, indent: 1 },
+		]);
+	});
 
 	await t.test("shows bare assignment with joiner", () => {
 		// TOKEN=$(curl ... | jq ...) && curl ... — assignment appears with ✔
