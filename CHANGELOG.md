@@ -4,6 +4,19 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+
+- **`timeout` and `gtimeout` wrapper support** — Their duration and value-taking
+  options are skipped during extraction so wrapped commands are checked against
+  their own rules. Both wrappers are allowed by default, avoiding redundant
+  prompts when the wrapped command is already allowed (#26).
+
+### Fixed
+
+- **Synthetic quotes in expanded wrapper prompts** — Simple arguments in
+  extracted commands are no longer shown with artificial quotes; quotes remain
+  when needed to preserve argument boundaries.
+
 ## [1.5.0] - 2026-09-23
 
 ### Added
