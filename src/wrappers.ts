@@ -336,9 +336,14 @@ function extractExec(
 	return results;
 }
 
-/** Quote parsed argument values so re-parsing retains their original boundaries. */
+/** Quote arguments only when needed, preserving their boundaries when re-parsed. */
 function shellQuoteArguments(args: string[]): string {
-	return args.map((arg) => `'${arg.replaceAll("'", "'\\\"'\\\"'")}'`).join(" ");
+	return args.map(shellQuoteArgument).join(" ");
+}
+
+function shellQuoteArgument(arg: string): string {
+	if (/^[A-Za-z0-9_@%+=:,./-]+$/.test(arg)) return arg;
+	return `'${arg.replaceAll("'", "'\\\"'\\\"'")}'`;
 }
 
 /**
