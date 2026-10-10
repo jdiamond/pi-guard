@@ -120,9 +120,19 @@ export function expandWrapperCommands(commands: CommandRef[]): ExpansionResult {
 		(max, cmd) => Math.max(max, cmd.group ?? 0),
 		-1,
 	);
+	const maxDisplayContextId = commands.reduce(
+		(max, command) =>
+			Math.max(
+				max,
+				...(command.displayContexts ?? []).map((context) => context.id + 1),
+			),
+		0,
+	);
 	const ctx: ExtractCtx = {
 		nextGroupId: maxGroupId + 1,
 		groupParents: new Map(),
+		displayContexts: [],
+		nextDisplayContextId: maxDisplayContextId,
 	};
 	const result = doExpand(commands, expandedWrappers, ctx);
 	return { commands: result, expandedWrappers };
@@ -133,9 +143,10 @@ function doExpand(
 	expandedWrappers: Set<CommandRef>,
 	ctx: ExtractCtx,
 ): CommandRef[] {
-	const result: CommandRef[] = [...commands];
+	const result: CommandRef[] = [];
 
 	for (const cmd of commands) {
+		result.push(cmd);
 		const name = getCommandName(cmd);
 		const spec = WRAPPER_COMMANDS[name];
 		if (!spec) continue;
@@ -167,11 +178,24 @@ function extractSubCommands(
 				spec.skipVarAssignments ?? false,
 				spec.skipPositionals ?? 0,
 				ctx,
+				cmd.displayContexts,
 			);
 		case "flag":
-			return extractFlag(cmd, spec.flag, spec.flagArgs, ctx);
+			return extractFlag(
+				cmd,
+				spec.flag,
+				spec.flagArgs,
+				ctx,
+				cmd.displayContexts,
+			);
 		case "exec":
-			return extractExec(cmd, spec.keywords, spec.terminators, ctx);
+			return extractExec(
+				cmd,
+				spec.keywords,
+				spec.terminators,
+				ctx,
+				cmd.displayContexts,
+			);
 	}
 }
 
@@ -230,6 +254,7 @@ function extractPassthrough(
 	skipVarAssignments = false,
 	skipPositionals = 0,
 	ctx?: ExtractCtx,
+	parentContexts?: CommandRef["displayContexts"],
 ): CommandRef[] {
 	const args = getCommandArgs(cmd);
 	const i = scanPassthroughBoundary(
@@ -244,6 +269,7 @@ function extractPassthrough(
 		shellQuoteArguments(args.slice(i)),
 		ctx,
 		cmd.group,
+		parentContexts,
 	);
 }
 
@@ -258,6 +284,7 @@ function extractFlag(
 	targetFlag: string,
 	flagArgs?: string[],
 	ctx?: ExtractCtx,
+	parentContexts?: CommandRef["displayContexts"],
 ): CommandRef[] {
 	const args = getCommandArgs(cmd);
 
@@ -267,7 +294,9 @@ function extractFlag(
 
 		if (arg === targetFlag) {
 			const scriptArg = args[i + 1];
-			return scriptArg ? parseSubCommandString(scriptArg, ctx, cmd.group) : [];
+			return scriptArg
+				? parseSubCommandString(scriptArg, ctx, cmd.group, parentContexts)
+				: [];
 		}
 
 		if (arg?.startsWith("-")) {
@@ -312,6 +341,7 @@ function extractExec(
 	keywords: string[],
 	terminators: string[] | null,
 	ctx?: ExtractCtx,
+	parentContexts?: CommandRef["displayContexts"],
 ): CommandRef[] {
 	const args = getCommandArgs(cmd);
 	const results: CommandRef[] = [];
@@ -325,7 +355,12 @@ function extractExec(
 			i = nextIdx;
 			if (parts.length > 0) {
 				results.push(
-					...parseSubCommandString(shellQuoteArguments(parts), ctx, cmd.group),
+					...parseSubCommandString(
+						shellQuoteArguments(parts),
+						ctx,
+						cmd.group,
+						parentContexts,
+					),
 				);
 			}
 			continue;
@@ -354,6 +389,7 @@ function parseSubCommandString(
 	str: string,
 	ctx?: ExtractCtx,
 	parentGroup?: number,
+	parentContexts?: CommandRef["displayContexts"],
 ): CommandRef[] {
 	try {
 		const ast = parseBash(str);
@@ -362,8 +398,18 @@ function parseSubCommandString(
 			str,
 			ctx ?? createExtractCtx(),
 		);
-		if (parentGroup === undefined) return commands;
-		return commands.map((command) => ({ ...command, parentGroup }));
+		return commands.map((command) => ({
+			...command,
+			...(parentGroup === undefined ? {} : { parentGroup }),
+			...(parentContexts || command.displayContexts
+				? {
+						displayContexts: [
+							...(parentContexts ?? []),
+							...(command.displayContexts ?? []),
+						],
+					}
+				: {}),
+		}));
 	} catch {
 		// If we can't parse the sub-command string, we can't check it.
 		// Return empty — the caller will still check the wrapper command

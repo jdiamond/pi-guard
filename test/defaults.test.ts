@@ -9,3 +9,10 @@ test("default bash rules allow file-test commands", () => {
 	assert.equal(resolveBashAction("[", ["-f", "file", "]"], rules), "allow");
 	assert.equal(resolveBashAction("test", ["-d", "directory"], rules), "allow");
 });
+
+test("default bash rules allow loop-control builtins", () => {
+	const rules = DEFAULT_CONFIG.rules.bash;
+
+	assert.equal(resolveBashAction("break", [], rules), "allow");
+	assert.equal(resolveBashAction("continue", [], rules), "allow");
+});

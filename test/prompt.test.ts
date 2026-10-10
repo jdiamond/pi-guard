@@ -16,6 +16,18 @@ function extract(raw: string) {
 	return extractAllCommandsFromAST(parseBash(raw), raw);
 }
 
+function summarizeApprovalLines(
+	data: ReturnType<typeof buildApprovalPromptData>,
+) {
+	return data.commands.map((line) => [
+		line.type ?? "command",
+		line.indent ?? 0,
+		line.allowed,
+		line.text,
+		line.joiner,
+	]);
+}
+
 test("buildBashApprovalChoices", async (t) => {
 	await t.test(
 		"shows command and write options when both need approval",
@@ -114,6 +126,154 @@ test("buildApprovalPromptData", async (t) => {
 			{ text: "grep bar", allowed: false, joiner: "|" },
 			{ text: "wc -l", allowed: false },
 		]);
+	});
+
+	await t.test(
+		"shows loop, substitution, pipeline, and group boundaries",
+		() => {
+			const raw =
+				'for stack in prod-jp prod-eu; do output=$(pulumi stack output --stack "$stack" | jq -r ".serviceUrl"); (cd "infra/$stack" && ./scripts/check-health.sh "$output"); done';
+			const commands = extract(raw);
+			const unauthorized = commands.filter((command) =>
+				["pulumi", "./scripts/check-health.sh"].includes(
+					getCommandName(command),
+				),
+			);
+
+			assert.deepEqual(
+				summarizeApprovalLines(buildApprovalPromptData(commands, unauthorized)),
+				[
+					["context", 0, true, "for stack in prod-jp prod-eu; do", undefined],
+					["command", 1, true, "output=$(...)", ";"],
+					["command", 2, false, 'pulumi stack output --stack "$stack"', "|"],
+					["command", 2, true, 'jq -r ".serviceUrl"', undefined],
+					["context", 1, true, "(", undefined],
+					["command", 2, true, 'cd "infra/$stack"', "&&"],
+					[
+						"command",
+						2,
+						false,
+						'./scripts/check-health.sh "$output"',
+						undefined,
+					],
+					["context", 1, true, ")", undefined],
+					["context", 0, true, "done", undefined],
+				],
+			);
+		},
+	);
+
+	await t.test("shows if/elif/else branches around command statuses", () => {
+		const commands = extract(
+			"if check-a; then run-a; elif check-b; then run-b; else run-c; fi",
+		);
+		assert.deepEqual(
+			summarizeApprovalLines(buildApprovalPromptData(commands, commands)),
+			[
+				["context", 0, true, "if", undefined],
+				["command", 1, false, "check-a", undefined],
+				["context", 0, true, "then", undefined],
+				["command", 1, false, "run-a", undefined],
+				["context", 0, true, "elif", undefined],
+				["command", 1, false, "check-b", undefined],
+				["context", 0, true, "then", undefined],
+				["command", 1, false, "run-b", undefined],
+				["context", 0, true, "else", undefined],
+				["command", 1, false, "run-c", undefined],
+				["context", 0, true, "fi", undefined],
+			],
+		);
+	});
+
+	await t.test("shows loop conditions and boundaries", () => {
+		for (const [raw, keyword, condition, body] of [
+			["while check; do run; done", "while", "check", "run"],
+			["until ready; do wait; done", "until", "ready", "wait"],
+		] as const) {
+			const commands = extract(raw);
+			assert.deepEqual(
+				summarizeApprovalLines(buildApprovalPromptData(commands, commands)),
+				[
+					["context", 0, true, keyword, undefined],
+					["command", 1, false, condition, undefined],
+					["context", 0, true, "do", undefined],
+					["command", 1, false, body, undefined],
+					["context", 0, true, "done", undefined],
+				],
+			);
+		}
+	});
+
+	await t.test("shows test-only conditions and brace-group boundaries", () => {
+		const commands = extract("if [[ -f config ]]; then { cat config; }; fi");
+		assert.deepEqual(
+			summarizeApprovalLines(buildApprovalPromptData(commands, commands)),
+			[
+				["context", 0, true, "if [[ -f config ]]; then", undefined],
+				["context", 1, true, "{", undefined],
+				["command", 2, false, "cat config", undefined],
+				["context", 1, true, "}", undefined],
+				["context", 0, true, "fi", undefined],
+			],
+		);
+	});
+
+	await t.test("keeps expanded wrapper commands inside loop context", () => {
+		const expanded = expandWrapperCommands(
+			extract("for item in a; do xargs rm; echo after; done"),
+		);
+		const unauthorized = expanded.commands.filter(
+			(command) => getCommandName(command) === "rm",
+		);
+		assert.deepEqual(
+			summarizeApprovalLines(
+				buildApprovalPromptData(
+					expanded.commands,
+					unauthorized,
+					undefined,
+					expanded.expandedWrappers,
+				),
+			),
+			[
+				["context", 0, true, "for item in a; do", undefined],
+				["command", 1, true, "xargs ...", ";"],
+				["command", 2, false, "rm", undefined],
+				["command", 1, true, "echo after", undefined],
+				["context", 0, true, "done", undefined],
+			],
+		);
+	});
+
+	await t.test(
+		"keeps process-substitution commands nested in loop context",
+		() => {
+			const commands = extract(
+				"for x in a; do diff <(sort $x) <(sort ref); done",
+			);
+			assert.deepEqual(
+				summarizeApprovalLines(buildApprovalPromptData(commands, commands)),
+				[
+					["context", 0, true, "for x in a; do", undefined],
+					["command", 1, false, "diff <(...) <(...)", undefined],
+					["command", 2, false, "sort $x", undefined],
+					["command", 2, false, "sort ref", undefined],
+					["context", 0, true, "done", undefined],
+				],
+			);
+		},
+	);
+
+	await t.test("elides loop-input command substitutions in the header", () => {
+		const commands = extract("for x in $(seq 1 2); do echo $x; done");
+		assert.deepEqual(
+			summarizeApprovalLines(buildApprovalPromptData(commands, commands)),
+			[
+				["context", 0, true, "for x in $(...); do", undefined],
+				["command", 2, false, "seq 1 2", undefined],
+				["command", 1, false, "echo $x", undefined],
+				["context", 0, true, "done", undefined],
+			],
+		);
 	});
 
 	await t.test("shows || joiners", () => {

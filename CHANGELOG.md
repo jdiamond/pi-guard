@@ -6,6 +6,10 @@ All notable changes to this project will be documented in this file.
 
 ### Added
 
+- **Shell control-flow context in Bash approval prompts** — Approval prompts now
+  show loop, conditional, subshell, and brace-group boundaries around extracted
+  commands. The `break` and `continue` loop-control builtins are allowed by
+  default (#30).
 - **`timeout` and `gtimeout` wrapper support** — Their duration and value-taking
   options are skipped during extraction so wrapped commands are checked against
   their own rules. Both wrappers are allowed by default, avoiding redundant

@@ -1,5 +1,13 @@
 import type { Command } from "unbash";
 
+/** A shell control-flow or grouping boundary shown around a command in approvals. */
+export interface DisplayContext {
+	id: number;
+	group: number;
+	open: string;
+	close: string;
+}
+
 /** A concrete command node together with the source string its positions refer to. */
 export interface CommandRef {
 	node: Command;
@@ -11,6 +19,8 @@ export interface CommandRef {
 	/** The operator connecting this command to the next ("|", "&&", "||", or ";").
 	 * Undefined for the last command in a group. */
 	joiner?: "|" | "&&" | "||" | ";";
+	/** Control-flow and grouping boundaries surrounding this command. */
+	displayContexts?: DisplayContext[];
 }
 
 /** Matcher types define how to extract and match input from a tool call. */

@@ -3,17 +3,21 @@ import type {
 	AssignmentPrefix,
 	Command,
 	CommandExpansionPart,
+	For,
+	If,
 	Node,
 	ParameterExpansionPart,
 	ProcessSubstitutionPart,
 	Redirect,
 	Script,
 	TestExpression,
+	While,
 	Word,
 	WordPart,
 } from "unbash";
 import { parse as parseBash } from "unbash";
-import type { CommandRef } from "./types.ts";
+import { displayWordElidingExpansions } from "./format.ts";
+import type { CommandRef, DisplayContext } from "./types.ts";
 
 // This module walks the entire bash AST because a permission guard must see
 // every command that the shell will actually execute. Commands can be hidden
@@ -28,11 +32,18 @@ export type { CommandRef };
 export interface ExtractCtx {
 	nextGroupId: number;
 	groupParents: Map<number, number | undefined>;
+	displayContexts: DisplayContext[];
+	nextDisplayContextId: number;
 }
 
 /** Create a new extraction context starting at groupId 0. */
 export function createExtractCtx(): ExtractCtx {
-	return { nextGroupId: 0, groupParents: new Map() };
+	return {
+		nextGroupId: 0,
+		groupParents: new Map(),
+		displayContexts: [],
+		nextDisplayContextId: 0,
+	};
 }
 
 /** Allocate the next group ID from the context. */
@@ -40,6 +51,30 @@ function allocGroupId(ctx: ExtractCtx, parentGroup?: number): number {
 	const groupId = ctx.nextGroupId++;
 	ctx.groupParents.set(groupId, parentGroup);
 	return groupId;
+}
+
+function withDisplayContext(
+	ctx: ExtractCtx,
+	group: number,
+	open: string,
+	close: string,
+	collect: () => void,
+): void {
+	ctx.displayContexts.push({
+		id: ctx.nextDisplayContextId++,
+		group,
+		open,
+		close,
+	});
+	try {
+		collect();
+	} finally {
+		ctx.displayContexts.pop();
+	}
+}
+
+function compactSyntax(source: string): string {
+	return source.trim().replace(/\s*\n\s*/g, " ");
 }
 
 /** Find the last CommandRef in commands that has the given group,
@@ -149,22 +184,15 @@ function collectControlFlow(
 ) {
 	switch (node.type) {
 		case "If":
-			collectNode(node.clause, source, commands, groupId, ctx);
-			collectNode(node.then, source, commands, groupId, ctx);
-			if (node.else) collectNode(node.else, source, commands, groupId, ctx);
+			collectIf(node, source, commands, groupId, ctx);
 			return;
 
 		case "While":
-			collectNode(node.clause, source, commands, groupId, ctx);
-			collectNode(node.body, source, commands, groupId, ctx);
+			collectWhile(node, source, commands, groupId, ctx);
 			return;
 
 		case "For":
-			collectWord(node.name, source, commands, groupId, ctx);
-			for (const word of node.wordlist) {
-				collectWord(word, source, commands, groupId, ctx);
-			}
-			collectNode(node.body, source, commands, groupId, ctx);
+			collectFor(node, source, commands, groupId, ctx);
 			return;
 
 		case "Select":
@@ -182,6 +210,84 @@ function collectControlFlow(
 			}
 			return;
 	}
+}
+
+function collectIf(
+	node: If,
+	source: string,
+	commands: CommandRef[],
+	groupId: number,
+	ctx: ExtractCtx,
+): void {
+	const keyword = source.slice(node.pos).trimStart().startsWith("elif")
+		? "elif"
+		: "if";
+	const clauseStart = commands.length;
+	withDisplayContext(ctx, groupId, keyword, "then", () =>
+		collectNode(node.clause, source, commands, groupId, ctx),
+	);
+	const thenOpen =
+		commands.length > clauseStart
+			? ""
+			: compactSyntax(source.slice(node.pos, node.then.pos));
+	withDisplayContext(ctx, groupId, thenOpen, node.else ? "" : "fi", () =>
+		collectNode(node.then, source, commands, groupId, ctx),
+	);
+	if (node.else?.type === "If") {
+		collectNode(node.else, source, commands, groupId, ctx);
+	} else if (node.else) {
+		withDisplayContext(ctx, groupId, "else", "fi", () =>
+			collectNode(node.else, source, commands, groupId, ctx),
+		);
+	}
+}
+
+function collectWhile(
+	node: While,
+	source: string,
+	commands: CommandRef[],
+	groupId: number,
+	ctx: ExtractCtx,
+): void {
+	const clauseStart = commands.length;
+	withDisplayContext(ctx, groupId, node.kind, "do", () =>
+		collectNode(node.clause, source, commands, groupId, ctx),
+	);
+	const bodyOpen =
+		commands.length === clauseStart
+			? compactSyntax(source.slice(node.pos, node.body.pos))
+			: "";
+	withDisplayContext(ctx, groupId, bodyOpen, "done", () =>
+		collectNode(node.body, source, commands, groupId, ctx),
+	);
+}
+
+function collectFor(
+	node: For,
+	source: string,
+	commands: CommandRef[],
+	groupId: number,
+	ctx: ExtractCtx,
+): void {
+	let header = source.slice(node.pos, node.body.pos);
+	for (const word of [node.name, ...node.wordlist].sort(
+		(a, b) => b.pos - a.pos,
+	)) {
+		const start = word.pos - node.pos;
+		const end = word.end - node.pos;
+		const display = displayWordElidingExpansions(word, source).replace(
+			/\n/g,
+			"↵",
+		);
+		header = `${header.slice(0, start)}${display}${header.slice(end)}`;
+	}
+	withDisplayContext(ctx, groupId, compactSyntax(header), "done", () => {
+		collectWord(node.name, source, commands, groupId, ctx);
+		for (const word of node.wordlist) {
+			collectWord(word, source, commands, groupId, ctx);
+		}
+		collectNode(node.body, source, commands, groupId, ctx);
+	});
 }
 
 /** Handle remaining node types: Statement, Command, Subshell, BraceGroup,
@@ -206,8 +312,15 @@ function collectRemaining(
 			return;
 
 		case "Subshell":
+			withDisplayContext(ctx, groupId, "(", ")", () =>
+				collectNode(node.body, source, commands, groupId, ctx),
+			);
+			return;
+
 		case "BraceGroup":
-			collectNode(node.body, source, commands, groupId, ctx);
+			withDisplayContext(ctx, groupId, "{", "}", () =>
+				collectNode(node.body, source, commands, groupId, ctx),
+			);
 			return;
 
 		case "Function":
@@ -231,16 +344,36 @@ function collectRemaining(
 			return;
 
 		case "ArithmeticFor":
-			collectArithmeticExpression(
-				node.initialize,
-				source,
-				commands,
-				groupId,
+			withDisplayContext(
 				ctx,
+				groupId,
+				compactSyntax(source.slice(node.pos, node.body.pos)),
+				"done",
+				() => {
+					collectArithmeticExpression(
+						node.initialize,
+						source,
+						commands,
+						groupId,
+						ctx,
+					);
+					collectArithmeticExpression(
+						node.test,
+						source,
+						commands,
+						groupId,
+						ctx,
+					);
+					collectArithmeticExpression(
+						node.update,
+						source,
+						commands,
+						groupId,
+						ctx,
+					);
+					collectNode(node.body, source, commands, groupId, ctx);
+				},
 			);
-			collectArithmeticExpression(node.test, source, commands, groupId, ctx);
-			collectArithmeticExpression(node.update, source, commands, groupId, ctx);
-			collectNode(node.body, source, commands, groupId, ctx);
 			return;
 
 		case "ArithmeticCommand":
@@ -269,6 +402,9 @@ function collectCommand(
 			source,
 			group: groupId,
 			...(parentGroup === undefined ? {} : { parentGroup }),
+			...(ctx.displayContexts.length > 0
+				? { displayContexts: [...ctx.displayContexts] }
+				: {}),
 		});
 	}
 

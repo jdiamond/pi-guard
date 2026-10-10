@@ -11,6 +11,7 @@ export interface ApprovalPromptOptions {
 export interface ApprovalCommandLine {
 	text: string;
 	allowed: boolean;
+	type?: "context" | undefined;
 	highlighted?: boolean | undefined;
 	indent?: number | undefined;
 	joiner?: string | undefined;
@@ -64,12 +65,16 @@ export function buildApprovalPromptData(
 		groupParents,
 	);
 
+	const activeContexts: { id: number; close: string; indent: number }[] = [];
 	for (const command of allCommands) {
+		const nestingDepth = groupNestingDepth(command.group, groupParents);
+		updateDisplayContexts(commands, activeContexts, command, groupParents);
+
 		const allowed = !unauthorizedSet.has(command);
 		const display = expandedWrappers?.has(command)
 			? formatWrapperDisplay(command)
 			: formatCommand(command, options);
-		const indent = groupNestingDepth(command.group, groupParents);
+		const indent = nestingDepth + activeContexts.length;
 		const line: ApprovalCommandLine = { text: display, allowed };
 		if (highlightedCommands.has(command)) line.highlighted = true;
 		if (indent > 0) line.indent = indent;
@@ -77,7 +82,61 @@ export function buildApprovalPromptData(
 		commands.push(line);
 	}
 
+	closeDisplayContexts(commands, activeContexts, 0);
 	return { title: "⚠️ Unapproved Commands", commands };
+}
+
+interface ActiveDisplayContext {
+	id: number;
+	close: string;
+	indent: number;
+}
+
+function updateDisplayContexts(
+	lines: ApprovalCommandLine[],
+	active: ActiveDisplayContext[],
+	command: CommandRef,
+	groupParents: ReadonlyMap<number, number>,
+): void {
+	const contexts = command.displayContexts ?? [];
+	let common = 0;
+	while (
+		common < active.length &&
+		common < contexts.length &&
+		active[common]?.id === contexts[common]?.id
+	) {
+		common++;
+	}
+	closeDisplayContexts(lines, active, common);
+	active.length = common;
+
+	for (let i = common; i < contexts.length; i++) {
+		const context = contexts[i];
+		if (!context) continue;
+		const indent = groupNestingDepth(context.group, groupParents) + i;
+		if (context.open) lines.push(contextLine(context.open, indent));
+		active.push({ id: context.id, close: context.close, indent });
+	}
+}
+
+function closeDisplayContexts(
+	lines: ApprovalCommandLine[],
+	active: ActiveDisplayContext[],
+	from: number,
+): void {
+	for (let i = active.length - 1; i >= from; i--) {
+		const context = active[i];
+		if (context?.close) lines.push(contextLine(context.close, context.indent));
+	}
+}
+
+function contextLine(text: string, indent: number): ApprovalCommandLine {
+	return {
+		text,
+		allowed: true,
+		type: "context",
+		...(indent > 0 ? { indent } : {}),
+	};
 }
 
 function findInputSources(

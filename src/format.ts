@@ -176,7 +176,7 @@ function displayWord(word: Word | undefined, source: string): string {
  * For example, `echo $(cat foo | grep bar)` displays as `echo $(...)`
  * instead of `echo $(cat foo | grep bar)`.
  */
-function displayWordElidingExpansions(
+export function displayWordElidingExpansions(
 	word: Word | undefined,
 	source: string,
 ): string {
