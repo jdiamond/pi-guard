@@ -7,12 +7,13 @@ pi-guard intercepts tool calls and prompts for approval before executing potenti
 ## Features
 
 - **Bash command matching** — Parses shell commands with an AST parser, handles pipes, subshells, wrapper commands (`sudo`, `xargs`, `bash -c`, `find -exec`), and supports glob tokens in rules
+- **Control-flow-aware prompts** — Approval prompts preserve loop, conditional, subshell, and brace-group structure while showing each command's status
 - **Path matching** — Glob patterns for file read/write/edit permissions
 - **Extensible** — Add matchers for any tool with `exact`, `glob`, or `bash` matching
 - **Sensible defaults** — Reading is safe, writing is dangerous. Works out of the box
 - **Layered configuration** — Default → user → project → env → profile → session, last match wins
 - **Non-interactive support** — Denied commands are silently blocked in CI/CD; use `PI_GUARD` env var for automation
-- **Session rules** — "Always allow for this session" without modifying config files
+- **Session rules** — Temporarily allow commands or tools for this session without modifying config files
 
 ## Examples
 
@@ -32,7 +33,8 @@ The prompt looks like:
 ✖ rm -rf dist/
 
 → Allow
-  Always allow rm (this session)
+  Temporarily allow rm (this session only)
+  Permanently allow rm (save to settings.json)
   Reject
 ```
 
@@ -55,7 +57,37 @@ The prompt looks like:
 ✖ curl -H "Authorization: Bearer $TOKEN" https://api.example.com/data
 
 → Allow
-  Always allow curl (this session)
+  Temporarily allow curl (this session only)
+  Permanently allow curl (save to settings.json)
+  Reject
+```
+
+Shell control flow remains visible in the prompt. For example, when the agent runs:
+
+```bash
+for stack in staging prod; do
+  if [ -f "infra/$stack/config" ]; then
+    curl -fsS "https://$stack.example.com/health"
+  fi
+done
+```
+
+The prompt shows the conditions and loop around each checked command:
+
+```
+⚠️ Unapproved Commands
+
+for stack in staging prod; do
+  if
+    ✔ [ -f "infra/$stack/config" ]
+  then
+    ✖ curl -fsS "https://$stack.example.com/health"
+  fi
+done
+
+→ Allow
+  Temporarily allow curl (this session only)
+  Permanently allow curl (save to settings.json)
   Reject
 ```
 
@@ -75,7 +107,8 @@ The prompt looks like:
 ✖ sed --in-place s/TODO/DONE/g
 
 → Allow
-  Always allow sed (this session)
+  Temporarily allow sed (this session only)
+  Permanently allow sed (save to settings.json)
   Reject
 ```
 
@@ -94,7 +127,8 @@ The prompt looks like:
 ✖ rm {}
 
 → Allow
-  Always allow rm (this session)
+  Temporarily allow rm (this session only)
+  Permanently allow rm (save to settings.json)
   Reject
 ```
 
@@ -106,7 +140,8 @@ For file operations, there's no command to parse — the prompt shows the path b
 src/lib/config.ts
 
 → Allow
-  Always allow write (this session)
+  Temporarily allow write (this session only)
+  Permanently allow write (save to settings.json)
   Reject
 ```
 
@@ -118,7 +153,8 @@ For custom tools, the prompt shows the matched parameter value:
 https://api.github.com/repos/jdiamond/pi-guard/issues
 
 → Allow
-  Always allow web_fetch (this session)
+  Temporarily allow web_fetch (this session only)
+  Permanently allow web_fetch (save to settings.json)
   Reject
 ```
 
@@ -218,7 +254,7 @@ Tools without a matcher get simple allow/ask/deny for the whole tool.
 ### Bash matching
 
 1. Parse the command with the unbash AST parser
-2. Extract all commands from the AST (handles pipes, subshells, command substitutions, process substitutions, heredocs, `if`/`while`/`for`/`case`, functions)
+2. Extract all commands from the AST (handles pipes, subshells, command and process substitutions, heredocs, `if`/`elif`/`while`/`until`/`for`/`case`, brace groups, and functions)
 3. Expand wrapper commands (`xargs rm` → `xargs` + `rm`, `sudo rm` → `sudo` + `rm`, `bash -c 'rm -rf /'` → `bash -c` + `rm`, `find -exec rm {} \;` → `find -exec` + `rm`)
 4. For each command, check rules using **subsequence matching** — rule tokens must appear in order, extra arguments are allowed
 
@@ -286,7 +322,7 @@ default → user config → project config → env (PI_GUARD) → profile → se
 
 See [src/defaults.ts](src/defaults.ts) for the built-in defaults.
 
-The defaults follow a simple principle: **reading is safe, writing is dangerous**. Read-only bash commands (`ls`, `cat`, `git log`, `grep`, etc.) are allowed, while anything that modifies state asks for approval. Note that `sed` is allowed by default, but `sed -i*` (in-place edit) is set to `ask` since it modifies files. File reads are mostly allowed except for sensitive patterns (`*.env`, `*.pem`). All edits and writes require approval.
+The defaults follow a simple principle: **reading is safe, writing is dangerous**. Read-only bash commands (`ls`, `cat`, `git log`, `grep`, `[`, `test`, etc.) and loop-control builtins (`break`, `continue`) are allowed, while anything that modifies state asks for approval. Note that `sed` is allowed by default, but `sed -i*` (in-place edit) is set to `ask` since it modifies files. File reads are mostly allowed except for sensitive patterns (`*.env`, `*.pem`). All edits and writes require approval.
 
 > [!TIP]
 > To trust the agent with file modifications (useful in containers or trusted environments):
