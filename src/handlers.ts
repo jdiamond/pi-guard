@@ -21,18 +21,43 @@ import { getCommandArgs, getCommandName, isBareAssignment } from "./resolve.ts";
 import type { Action, CommandRef, ToolCallInput } from "./types.ts";
 import { expandWrapperCommands } from "./wrappers.ts";
 
+// Pi may execute tool calls concurrently, but the TUI can display only one guard dialog.
+let approvalQueue = Promise.resolve();
+
+async function withApprovalLock<T>(
+	signal: AbortSignal | undefined,
+	fn: () => Promise<T>,
+): Promise<T | undefined> {
+	const previous = approvalQueue;
+	let release: (() => void) | undefined;
+	approvalQueue = new Promise<void>((resolve) => {
+		release = resolve;
+	});
+
+	await previous;
+	try {
+		if (signal?.aborted) return;
+		return await fn();
+	} finally {
+		release?.();
+	}
+}
+
 async function withBlockedUi<T>(
 	pi: ExtensionAPI,
 	label: string,
+	ctx: ExtensionContext,
 	fn: () => Promise<T>,
-): Promise<T> {
-	pi.events.emit("nudge", { body: label });
-	pi.events.emit("herdr:blocked", { active: true, label });
-	try {
-		return await fn();
-	} finally {
-		pi.events.emit("herdr:blocked", { active: false });
-	}
+): Promise<T | undefined> {
+	return withApprovalLock(ctx.signal, async () => {
+		pi.events.emit("nudge", { body: label });
+		pi.events.emit("herdr:blocked", { active: true, label });
+		try {
+			return await fn();
+		} finally {
+			pi.events.emit("herdr:blocked", { active: false });
+		}
+	});
 }
 
 function blockedByUserRejection() {
@@ -48,20 +73,67 @@ async function showApprovalDialog(
 	promptData: ApprovalPromptData,
 	choices: string[],
 ): Promise<string | undefined> {
-	return ctx.ui.custom<string | undefined>((tui, theme, _keybindings, done) => {
-		const dialog = new ApprovalDialog(theme, {
-			data: promptData,
-			choices,
-			onChoice: done,
-		});
-		return {
-			render: (width) => dialog.render(width),
-			handleInput: (data) => {
-				dialog.handleInput(data);
-				tui.requestRender();
-			},
-			invalidate: () => dialog.invalidate(),
+	const signal = ctx.signal;
+	if (signal?.aborted) return undefined;
+
+	return new Promise((resolve, reject) => {
+		let settled = false;
+		let closeDialog: ((choice: string | undefined) => void) | undefined;
+		const finish = (choice: string | undefined) => {
+			if (settled) return;
+			settled = true;
+			signal?.removeEventListener("abort", abort);
+			resolve(choice);
 		};
+		const abort = () => {
+			try {
+				closeDialog?.(undefined);
+			} finally {
+				finish(undefined);
+			}
+		};
+
+		signal?.addEventListener("abort", abort, { once: true });
+		if (signal?.aborted) {
+			abort();
+			return;
+		}
+
+		void ctx.ui
+			.custom<string | undefined>((tui, theme, _keybindings, done) => {
+				closeDialog = done;
+				if (settled) {
+					done(undefined);
+					return {
+						render: () => [],
+						handleInput: () => undefined,
+						invalidate: () => undefined,
+					};
+				}
+
+				const dialog = new ApprovalDialog(theme, {
+					data: promptData,
+					choices,
+					onChoice: (choice) => {
+						done(choice);
+						finish(choice);
+					},
+				});
+				return {
+					render: (width) => dialog.render(width),
+					handleInput: (data) => {
+						dialog.handleInput(data);
+						tui.requestRender();
+					},
+					invalidate: () => dialog.invalidate(),
+				};
+			})
+			.then(finish, (error: unknown) => {
+				if (settled) return;
+				settled = true;
+				signal?.removeEventListener("abort", abort);
+				reject(error);
+			});
 	});
 }
 
@@ -159,8 +231,12 @@ async function handleBashParseFailure(
 		};
 	}
 
-	const confirmed = await withBlockedUi(pi, "Unparseable command", () =>
-		ctx.ui.confirm("⚠️ Could Not Parse Command Safely", "\nAllow anyway?"),
+	const confirmed = await withBlockedUi(pi, "Unparseable command", ctx, () =>
+		ctx.ui.confirm(
+			"⚠️ Could Not Parse Command Safely",
+			"\nAllow anyway?",
+			ctx.signal ? { signal: ctx.signal } : undefined,
+		),
 	);
 
 	if (!confirmed) {
@@ -291,7 +367,7 @@ async function handleInteractiveBash(
 	onSaveBashRules?: (patterns: string[]) => Promise<void>,
 	onSaveWriteRules?: (patterns: string[]) => Promise<void>,
 ): Promise<{ block: true; reason: string } | undefined> {
-	return withBlockedUi(pi, "Command approval", () =>
+	return withBlockedUi(pi, "Command approval", ctx, () =>
 		runApprovalLoop(
 			allCommands,
 			tool,
@@ -518,7 +594,7 @@ async function handleToolApproval(
 	const choices = ["Allow", temporaryAllowLabel];
 	if (onSave) choices.push(permanentAllowLabel);
 	choices.push("Reject");
-	const choice = await withBlockedUi(pi, `${tool} approval`, () =>
+	const choice = await withBlockedUi(pi, `${tool} approval`, ctx, () =>
 		showApprovalDialog(ctx, promptData, choices),
 	);
 	if (choice === temporaryAllowLabel) {

@@ -13,6 +13,13 @@ All notable changes to this project will be documented in this file.
 
 ### Fixed
 
+- **Concurrent approval prompts** — Interactive approval dialogs are serialized
+  so concurrent tool calls each receive a prompt instead of replacing one
+  another. An active dialog is dismissed when its operation is aborted, and
+  approvals still waiting in the queue are skipped.
+- **Stale herdr blocked status** — pi-guard clears the blocked indicator when an
+  approval finishes or is aborted, and when a new session starts after an
+  interrupted approval.
 - **Synthetic quotes in expanded wrapper prompts** — Simple arguments in
   extracted commands are no longer shown with artificial quotes; quotes remain
   when needed to preserve argument boundaries.
