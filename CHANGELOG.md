@@ -4,16 +4,28 @@ All notable changes to this project will be documented in this file.
 
 ## [Unreleased]
 
+## [1.6.0] - 2026-10-10
+
 ### Added
 
 - **Shell control-flow context in Bash approval prompts** — Approval prompts now
   show loop, conditional, subshell, and brace-group boundaries around extracted
   commands. The `break` and `continue` loop-control builtins are allowed by
   default (#30).
+- **Shell test commands allowed by default** — The `[` and `test` commands now
+  run without prompting for read-only tests (#31).
 - **`timeout` and `gtimeout` wrapper support** — Their duration and value-taking
   options are skipped during extraction so wrapped commands are checked against
   their own rules. Both wrappers are allowed by default, avoiding redundant
   prompts when the wrapped command is already allowed (#26).
+
+### Changed
+
+- **Dependencies updated and pinned:** `minimatch` 10.2.6, `unbash` 4.0.12,
+  `typebox` 1.3.27, `@biomejs/biome` 2.5.15, TypeScript 7.0.2, `@types/node`
+  26.6.4, and Pi `@earendil-works/pi-coding-agent`/`pi-tui` 1.1.0.
+- Pi host-provided packages are declared with wildcard peer ranges and pinned
+  development versions matching Pi 1.1.0.
 
 ### Fixed
 
