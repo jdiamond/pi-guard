@@ -285,6 +285,11 @@ export default function (pi: ExtensionAPI) {
 		},
 	});
 
+	// Clear stale blocked indicators when reopening a session after an interrupted prompt.
+	pi.on("session_start", () => {
+		pi.events.emit("herdr:blocked", { active: false });
+	});
+
 	// The core interception hook
 	pi.on("tool_call", async (event, ctx) => {
 		if (!context.config.enabled) return;
