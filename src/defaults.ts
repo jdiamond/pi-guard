@@ -14,6 +14,7 @@ export const DEFAULT_CONFIG = {
 	rules: {
 		bash: {
 			"*": "ask",
+			"[": "allow",
 			basename: "allow",
 			cat: "allow",
 			cd: "allow",
@@ -80,6 +81,7 @@ export const DEFAULT_CONFIG = {
 			stat: "allow",
 			tac: "allow",
 			tail: "allow",
+			test: "allow",
 			timeout: "allow",
 			tr: "allow",
 			true: "allow",
